@@ -264,37 +264,32 @@ elif menu == "Equipo":
             color: white;
         }
     </style>
-    
     <h2 style="text-align:center;">👥 El Equipo</h2>
     <p style="text-align:center;">Estudiantes de Ingeniería Estadística e Informática - UNALM</p>
-
     <div class="team-container">
-        <div class="member-card">
-            <div class="avatar">👨‍💻</div>
-            <div class="member-name">Daniel Ormeño Sakihama</div>
-            <div class="member-role">Ingeniería Estadística Informática</div>
-            <a href="https://github.com/Orsaki" target="_blank" class="github-btn">GitHub Profile</a>
-        </div>
-
-        <div class="member-card">
-            <div class="avatar">👨‍💻</div>
-            <div class="member-name">Luis Huamayalli</div>
-            <div class="member-role">Ingeniería Estadística Informática</div>
-            <a href="https://github.com/Albert-ca" target="_blank" class="github-btn">GitHub Profile</a>
-        </div>
-
-        <div class="member-card">
-            <div class="avatar">👩‍💻</div>
-            <div class="member-name">Pamela Lázaro</div>
-            <div class="member-role">Ingeniería Estadística Informática</div>
-            <a href="https://github.com/lazaropamela" target="_blank" class="github-btn">GitHub Profile</a>
-        </div>
-        
-        <div class="member-card">
-            <div class="avatar">👩‍💻</div>
-            <div class="member-name">Fátima Montes</div>
-            <div class="member-role">Ingeniería Estadística Informática</div>
-            <a href="https://github.com/FatimaMY" target="_blank" class="github-btn">GitHub Profile</a>
-        </div>
+    <div class="member-card">
+    <div class="avatar">👨‍💻</div>
+    <div class="member-name">Daniel Ormeño Sakihama</div>
+    <div class="member-role">Ingeniería Estadística Informática</div>
+    <a href="https://github.com/Orsaki" target="_blank" class="github-btn">GitHub Profile</a>
+    </div>
+    <div class="member-card">
+    <div class="avatar">👨‍💻</div>
+    <div class="member-name">Luis Huamayalli</div>
+    <div class="member-role">Ingeniería Estadística Informática</div>
+    <a href="https://github.com/Albert-ca" target="_blank" class="github-btn">GitHub Profile</a>
+    </div>
+    <div class="member-card">
+    <div class="avatar">👩‍💻</div>
+    <div class="member-name">Pamela Lázaro</div>
+    <div class="member-role">Ingeniería Estadística Informática</div>
+    <a href="https://github.com/lazaropamela" target="_blank" class="github-btn">GitHub Profile</a>
+    </div>
+    <div class="member-card">
+    <div class="avatar">👩‍💻</div>
+    <div class="member-name">Fátima Montes</div>
+    <div class="member-role">Ingeniería Estadística Informática</div>
+    <a href="https://github.com/FatimaMY" target="_blank" class="github-btn">GitHub Profile</a>
+    </div>
     </div>
     """, unsafe_allow_html=True)
