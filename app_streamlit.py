@@ -81,13 +81,24 @@ with st.sidebar:
 # SECCIÓN 1: INICIO (Contexto Teórico)
 # -----------------------------
 if menu == "Inicio":
-    st.markdown('<h1 class="main-title">LIMA SEGURA</h1>', unsafe_allow_html=True)
+    # 1. Título Actualizado
+    st.markdown('<h1 class="main-title">SISTEMA DE ALERTA DE DELITOS Y ZONAS PELIGROSAS</h1>', unsafe_allow_html=True)
     st.markdown('<p class="subtitle">Monitor de Criminalidad basado en Web Scraping y Geolocalización</p>', unsafe_allow_html=True)
 
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/Lima_Skyline.jpg/1200px-Lima_Skyline.jpg", use_container_width=True, caption="Panorama de Lima")
+    # 2. Imágenes Locales (desde la carpeta 'imagenes')
+    # Usamos columnas para que se vean una al lado de la otra
+    col_img1, col_img2 = st.columns(2)
+    
+    with col_img1:
+        # Asegúrate de que el nombre coincida exactamente con tu carpeta
+        st.image("imagenes/cambio_habitos.jpg", use_container_width=True, caption="Impacto en la ciudadanía")
+        
+    with col_img2:
+        st.image("imagenes/tukituki.png", use_container_width=True, caption="Análisis de seguridad")
 
     st.markdown("---")
     
+    # 3. Resto del contenido (Texto informativo)
     col1, col2 = st.columns(2)
     
     with col1:
@@ -109,6 +120,7 @@ if menu == "Inicio":
         4. **Visualización:** Mostramos los incidentes en un mapa interactivo.
         """)
 
+    # 4. KPIs (Indicadores)
     st.markdown("### 📊 Indicadores Clave (Demo)")
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
     
