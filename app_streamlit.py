@@ -3,6 +3,9 @@ from streamlit_option_menu import option_menu
 import pandas as pd
 import pydeck as pdk
 import plotly.express as px
+import requests
+from bs4 import BeautifulSoup
+
 
 # -----------------------------
 # CONFIGURACIÓN DE LA PÁGINA
@@ -199,6 +202,8 @@ elif menu == "Mapa del Crimen":
 # -----------------------------
 # SECCIÓN 3: ANÁLISIS POR PERIÓDICO (CON SCRAPING REAL)
 # -----------------------------
+
+
 elif menu == "Análisis por Periódico":
     st.title("📰 Análisis de Fuentes en Tiempo Real")
     st.write("Monitor de noticias de RPP. Se actualiza automáticamente cada 5 minutos.")
