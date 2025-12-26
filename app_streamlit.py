@@ -200,33 +200,64 @@ elif menu == "Mapa del Crimen":
     st.info("Nota: Este mapa se poblará dinámicamente cuando conectemos el módulo de Web Scraping.")
 
 # -----------------------------
-# SECCIÓN 3: ANÁLISIS POR PERIÓDICO (CON SCRAPING REAL)
+# SECCIÓN 3: ANÁLISIS POR PERIÓDICO (CON FECHA Y EXPLICACIÓN)
 # -----------------------------
-
-
 elif menu == "Análisis por Periódico":
-    st.title("📰 Análisis de Fuentes en Tiempo Real")
-    st.write("Monitor de noticias de RPP. Se actualiza automáticamente cada 5 minutos.")
+    from datetime import datetime # Importamos librería para la fecha
+    
+    # --- ENCABEZADO Y EXPLICACIÓN ---
+    st.title("📰 Monitor de Criminalidad en Lima")
+    
+    # Subtítulo con la fecha de hoy
+    fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+    st.markdown(f"### 🗞️ Fuente: RPP Noticias | 📅 Fecha: {fecha_hoy}")
 
-    # Definimos las constantes del Scraping
-    URL_WEB = "https://rpp.pe/ultimas-noticias"
-    PALABRAS_CLAVE = ["robo", "asalto", "delincuencia", "policía", "crimen", "sicario", "balacera", "muerte", "asesinato", "comisaría", "extorsión", "terna"]
+    # Explicación del funcionamiento (Desplegable para no ocupar mucho espacio)
+    with st.expander("ℹ️ ¿Cómo funciona este sistema? (Clic para ver detalles)", expanded=True):
+        st.markdown("""
+        Este monitor utiliza técnicas de **Web Scraping** y **NLP (Procesamiento de Lenguaje Natural)**:
+        
+        1.  **⏱️ Frecuencia:** El robot escanea la web de RPP cada **5 minutos** para buscar noticias frescas.
+        2.  **🔍 Filtro Inteligente:** Analiza cada titular y solo muestra aquellos que contengan palabras clave de riesgo (ej: *Robo, Asalto, Sicario, Extorsión*), descartando noticias de deportes o política.
+        3.  **📍 Geolocalización:** Busca nombres de distritos (ej: *SJL, Comas, Miraflores*) dentro del texto para ubicar el incidente.
+        """)
+        
+    st.markdown("---") # Línea separadora
+
+    # --- CONSTANTES Y CONFIGURACIÓN ---
+    URL_WEB = "https://rpp.pe/tema/inseguridad-ciudadana"
+    
+    PALABRAS_CLAVE = [
+        "robo", "asalto", "delincuencia", "policía", "crimen", "sicario", 
+        "balacera", "muerte", "asesinato", "comisaría", "extorsión", "terna", 
+        "captura", "banda", "droga", "operativo", "homicidio", "armas", 
+        "víctima", "delincuente", "ladrones", "atraco", "disparos"
+    ]
+
+    DISTRITOS_LIMA = [
+        "san juan de lurigancho", "sjl", "san martín de porres", "smp", "comas", 
+        "villa el salvador", "villa maría del triunfo", "san juan de miraflores", 
+        "ate", "los olivos", "puente piedra", "carabayllo", "cercado de lima", 
+        "santiago de surco", "callao", "ventanilla", "rimac", "la victoria", 
+        "el agustino", "independencia", "santa anita", "chorrillos", "pachacámac", 
+        "lurin", "san miguel", "magdalena", "miraflores", "san isidro", "surquillo",
+        "breña", "lince", "jesús maría"
+    ]
+
     HEADERS = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
 
-    # --- FUNCIÓN DE SCRAPING OPTIMIZADA (TTL=300s = 5 minutos) ---
-    @st.cache_data(ttl=300, show_spinner="Escaneando RPP Noticias...")
-    def obtener_noticias_rpp():
+    # --- FUNCIÓN DE SCRAPING ---
+    @st.cache_data(ttl=300, show_spinner="Analizando seguridad en Lima...")
+    def obtener_noticias_crimen():
         lista_noticias = []
         try:
-            # Hacemos la petición
             response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
             
             if response.status_code == 200:
                 soup = BeautifulSoup(response.content, 'html.parser')
-                # Buscamos h2 y h3 que suelen ser titulares en RPP
-                titulares = soup.find_all(['h2', 'h3'])
+                titulares = soup.find_all('h2') 
                 
                 for header in titulares:
                     enlace = header.find('a')
@@ -234,66 +265,76 @@ elif menu == "Análisis por Periódico":
                         titulo_texto = enlace.text.strip()
                         url_noticia = enlace.get('href')
                         
-                        # Corregir enlace si es relativo (no tiene https)
                         if url_noticia and not url_noticia.startswith("http"):
                             url_noticia = "https://rpp.pe" + url_noticia
+
+                        titulo_lower = titulo_texto.lower()
                         
-                        # FILTRO: Buscar palabras clave
-                        if any(palabra in titulo_texto.lower() for palabra in PALABRAS_CLAVE):
+                        # Filtro 1: Palabras Clave
+                        es_crimen = any(palabra in titulo_lower for palabra in PALABRAS_CLAVE)
+                        
+                        if es_crimen:
+                            # Filtro 2: Detección de Distrito
+                            distrito_detectado = "No especificado"
+                            for dist in DISTRITOS_LIMA:
+                                if dist in titulo_lower:
+                                    distrito_detectado = dist.upper()
+                                    break 
+                            
                             lista_noticias.append({
                                 "Titular": titulo_texto,
-                                "Categoría": "Seguridad/Policial",
+                                "Distrito": distrito_detectado,
+                                "Categoría": "Crimen/Seguridad",
                                 "Enlace": url_noticia,
-                                "Hora Detección": pd.Timestamp.now().strftime("%H:%M")
+                                "Hora": pd.Timestamp.now().strftime("%H:%M")
                             })
             else:
-                st.error(f"Error al conectar con RPP: Código {response.status_code}")
+                st.error(f"Error conexión: {response.status_code}")
                 
         except Exception as e:
-            st.error(f"Error inesperado en el scraping: {e}")
+            st.error(f"Error scraping: {e}")
             
-        # Retornamos un DataFrame (Tabla)
         return pd.DataFrame(lista_noticias)
 
-    # --- INTERFAZ DE USUARIO ---
-    
-    # 1. Botón de actualización manual
-    col_btn, col_info = st.columns([1, 4])
+    # --- INTERFAZ DE RESULTADOS ---
+    col_btn, col_stats = st.columns([1, 4])
     with col_btn:
         if st.button("🔄 Actualizar Ahora"):
-            obtener_noticias_rpp.clear() # Limpia la memoria caché
-            st.rerun() # Recarga la app
+            obtener_noticias_crimen.clear()
+            st.rerun()
             
-    # 2. Ejecutar (o traer de memoria) el scraping
-    df_noticias = obtener_noticias_rpp()
+    df_crimen = obtener_noticias_crimen()
 
-    # 3. Mostrar resultados
-    if not df_noticias.empty:
-        with col_info:
-            st.success(f"✅ Última actualización: {pd.Timestamp.now().strftime('%H:%M:%S')} | Noticias encontradas: {len(df_noticias)}")
+    if not df_crimen.empty:
+        df_crimen = df_crimen.sort_values(by="Distrito", ascending=False)
         
-        # Pestañas para organizar la vista
-        tab1, tab2 = st.tabs(["📋 Listado de Noticias", "📊 Estadísticas"])
+        total_crimenes = len(df_crimen)
+        con_distrito = len(df_crimen[df_crimen["Distrito"] != "No especificado"])
+
+        with col_stats:
+            st.success(f"🚨 Alertas Generadas: {total_crimenes} | 📍 Ubicaciones Confirmadas: {con_distrito}")
+
+        tab1, tab2 = st.tabs(["📋 Listado de Alertas", "📍 Gráfico de Zonas"])
         
         with tab1:
-            # Mostramos la tabla interactiva
             st.dataframe(
-                df_noticias, 
+                df_crimen,
                 column_config={
-                    "Enlace": st.column_config.LinkColumn("Leer Noticia")
+                    "Enlace": st.column_config.LinkColumn("Leer Noticia"),
+                    "Distrito": st.column_config.TextColumn("Distrito", help="Zona detectada en el titular"),
+                    "Titular": st.column_config.TextColumn("Titular", width="large")
                 },
                 use_container_width=True
             )
             
         with tab2:
-            st.metric("Total Alertas de Seguridad", len(df_noticias))
-            # Un gráfico simple de conteo (en este caso todas son de seguridad, pero sirve de ejemplo)
-            st.bar_chart(df_noticias["Categoría"].value_counts())
-            
+            df_chart = df_crimen[df_crimen["Distrito"] != "No especificado"]
+            if not df_chart.empty:
+                st.bar_chart(df_chart["Distrito"].value_counts(), color="#D32F2F")
+            else:
+                st.info("No se han detectado distritos específicos en las noticias recientes.")
     else:
-        st.warning("⚠️ Se escaneó RPP correctamente, pero no se encontraron noticias con palabras clave de seguridad en la portada.")
-        st.info(f"Palabras buscadas: {', '.join(PALABRAS_CLAVE)}")
-
+        st.warning("No se encontraron noticias de riesgo en este momento.")
 # -----------------------------
 # SECCIÓN 4: EQUIPO
 # -----------------------------
