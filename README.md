@@ -18,7 +18,7 @@ La inseguridad ciudadana es uno de los mayores desafíos en Lima. Este proyecto 
 
 Nuestra solución está desplegada como un dashboard interactivo usando Streamlit. Puedes explorar los mapas de calor y las últimas noticias aquí:
 
-**➡️ [Accede al dashboard de Lima Segura aquí](https://tu-link-de-streamlit-aqui.app/)**
+**➡️ [Accede al dashboard de Lima Segura aquí](https://lp-teoriatrabajofinal-npgerz4t2krxgad8b83fux.streamlit.app/)**
 
 *(Nota: Si aún no has desplegado la app, este enlace estará pendiente)*
 
