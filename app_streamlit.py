@@ -225,7 +225,7 @@ elif menu == "Equipo":
         }
         .member-card {
             background-color: #f8f9fa;
-            border-top: 5px solid #D32F2F;
+            border-top: 5px solid #D32F2F; /* Rojo Alerta */
             border-radius: 15px;
             padding: 30px;
             width: 250px;
@@ -237,18 +237,31 @@ elif menu == "Equipo":
             transform: translateY(-10px);
         }
         .member-name {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: bold;
             color: #333;
             margin-top: 15px;
         }
         .member-role {
             color: #666;
-            font-size: 0.9em;
+            font-size: 0.85em;
             margin-bottom: 15px;
         }
         .avatar {
             font-size: 50px;
+        }
+        .github-btn {
+            text-decoration: none; 
+            color: #D32F2F; 
+            font-weight: bold;
+            border: 1px solid #D32F2F;
+            padding: 5px 15px;
+            border-radius: 20px;
+            transition: all 0.3s ease;
+        }
+        .github-btn:hover {
+            background-color: #D32F2F;
+            color: white;
         }
     </style>
     
@@ -258,30 +271,30 @@ elif menu == "Equipo":
     <div class="team-container">
         <div class="member-card">
             <div class="avatar">👨‍💻</div>
-            <div class="member-name">Daniel Ormeño</div>
+            <div class="member-name">Daniel Ormeño Sakihama</div>
             <div class="member-role">Ingeniería Estadística Informática</div>
-            <a href="https://github.com/Orsaki" target="_blank" style="text-decoration:none; color:#D32F2F; font-weight:bold;">GitHub Profile</a>
-        </div>
-
-        <div class="member-card">
-            <div class="avatar">👩‍💻</div>
-            <div class="member-name">Miembro del Equipo</div>
-            <div class="member-role">Rol / Especialidad</div>
-            <span>GitHub Pendiente</span>
+            <a href="https://github.com/Orsaki" target="_blank" class="github-btn">GitHub Profile</a>
         </div>
 
         <div class="member-card">
             <div class="avatar">👨‍💻</div>
-            <div class="member-name">Miembro del Equipo</div>
-            <div class="member-role">Rol / Especialidad</div>
-            <span>GitHub Pendiente</span>
+            <div class="member-name">Luis Huamayalli</div>
+            <div class="member-role">Ingeniería Estadística Informática</div>
+            <a href="https://github.com/Albert-ca" target="_blank" class="github-btn">GitHub Profile</a>
+        </div>
+
+        <div class="member-card">
+            <div class="avatar">👩‍💻</div>
+            <div class="member-name">Pamela Lázaro</div>
+            <div class="member-role">Ingeniería Estadística Informática</div>
+            <a href="https://github.com/lazaropamela" target="_blank" class="github-btn">GitHub Profile</a>
         </div>
         
         <div class="member-card">
             <div class="avatar">👩‍💻</div>
-            <div class="member-name">Miembro del Equipo</div>
-            <div class="member-role">Rol / Especialidad</div>
-            <span>GitHub Pendiente</span>
+            <div class="member-name">Fátima Montes</div>
+            <div class="member-role">Ingeniería Estadística Informática</div>
+            <a href="https://github.com/FatimaMY" target="_blank" class="github-btn">GitHub Profile</a>
         </div>
     </div>
     """, unsafe_allow_html=True)
