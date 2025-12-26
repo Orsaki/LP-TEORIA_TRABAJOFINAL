@@ -20,7 +20,6 @@ Nuestra solución está desplegada como un dashboard interactivo usando Streamli
 
 **➡️ [Accede al dashboard de Lima Segura aquí](https://lp-teoriatrabajofinal-npgerz4t2krxgad8b83fux.streamlit.app/)**
 
-*(Nota: Si aún no has desplegado la app, este enlace estará pendiente)*
 
 <br>
 
