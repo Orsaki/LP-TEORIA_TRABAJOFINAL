@@ -200,141 +200,149 @@ elif menu == "Mapa del Crimen":
     st.info("Nota: Este mapa se poblará dinámicamente cuando conectemos el módulo de Web Scraping.")
 
 # -----------------------------
-# SECCIÓN 3: ANÁLISIS POR PERIÓDICO (CON FECHA Y EXPLICACIÓN)
+# SECCIÓN 3: ANÁLISIS POR PERIÓDICO (LÓGICA CORREGIDA)
 # -----------------------------
 elif menu == "Análisis por Periódico":
-    from datetime import datetime # Importamos librería para la fecha
+    from datetime import datetime 
+    import time
+    import re 
     
-    # --- ENCABEZADO Y EXPLICACIÓN ---
-    st.title("📰 Monitor de Criminalidad en Lima")
-    
-    # Subtítulo con la fecha de hoy
-    fecha_hoy = datetime.now().strftime("%d/%m/%Y")
-    st.markdown(f"### 🗞️ Fuente: RPP Noticias | 📅 Fecha: {fecha_hoy}")
+    # --- 1. MEMORIA (SESSION STATE) ---
+    if 'historial_noticias' not in st.session_state:
+        st.session_state['historial_noticias'] = pd.DataFrame(columns=["Titular", "Distrito", "Enlace"])
 
-    # Explicación del funcionamiento (Desplegable para no ocupar mucho espacio)
-    with st.expander("ℹ️ ¿Cómo funciona este sistema? (Clic para ver detalles)", expanded=True):
-        st.markdown("""
-        Este monitor utiliza técnicas de **Web Scraping** y **NLP (Procesamiento de Lenguaje Natural)**:
-        
-        1.  **⏱️ Frecuencia:** El robot escanea la web de RPP cada **5 minutos** para buscar noticias frescas.
-        2.  **🔍 Filtro Inteligente:** Analiza cada titular y solo muestra aquellos que contengan palabras clave de riesgo (ej: *Robo, Asalto, Sicario, Extorsión*), descartando noticias de deportes o política.
-        3.  **📍 Geolocalización:** Busca nombres de distritos (ej: *SJL, Comas, Miraflores*) dentro del texto para ubicar el incidente.
-        """)
-        
-    st.markdown("---") # Línea separadora
+    # --- 2. CONSTANTES Y FUNCIONES (Las definimos primero) ---
+    URL_BASE = "https://rpp.pe/tema/inseguridad-ciudadana"
+    HEADERS = {'User-Agent': 'Mozilla/5.0'}
 
-    # --- CONSTANTES Y CONFIGURACIÓN ---
-    URL_WEB = "https://rpp.pe/tema/inseguridad-ciudadana"
-    
     PALABRAS_CLAVE = [
-        "robo", "asalto", "delincuencia", "policía", "crimen", "sicario", 
-        "balacera", "muerte", "asesinato", "comisaría", "extorsión", "terna", 
+        "robo", "asalto", "delincuencia", "policia", "policía", "crimen", "sicario", 
+        "balacera", "muerte", "asesinato", "comisaria", "comisaría", "extorsion", "extorsión", "terna", 
         "captura", "banda", "droga", "operativo", "homicidio", "armas", 
-        "víctima", "delincuente", "ladrones", "atraco", "disparos"
+        "victima", "víctima", "delincuente", "ladrones", "atraco", "disparos", "cadáver", "cuerpo", "matan", "balean"
     ]
 
-    DISTRITOS_LIMA = [
-        "san juan de lurigancho", "sjl", "san martín de porres", "smp", "comas", 
-        "villa el salvador", "villa maría del triunfo", "san juan de miraflores", 
-        "ate", "los olivos", "puente piedra", "carabayllo", "cercado de lima", 
-        "santiago de surco", "callao", "ventanilla", "rimac", "la victoria", 
-        "el agustino", "independencia", "santa anita", "chorrillos", "pachacámac", 
-        "lurin", "san miguel", "magdalena", "miraflores", "san isidro", "surquillo",
-        "breña", "lince", "jesús maría"
+    EXCLUSIONES_TITULO = [
+        "congreso", "parlamento", "dina", "boluarte", "rusia", "ucrania", "gaza", 
+        "israel", "biden", "trump", "putin", "futbol", "fútbol", "liga 1", 
+        "seleccion", "selección", "fossati", "alianza", "universitario", "jne", "onpe"
     ]
 
-    HEADERS = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+    EXCLUSIONES_URL = [
+        "/mundo/", "/famosos/", "/entretenimiento/", "/cultura/", "/tecnologia/", 
+        "/ciencia/", "/economia/", "/vital/", "/automovilismo/"
+    ]
 
-    # --- FUNCIÓN DE SCRAPING ---
-    @st.cache_data(ttl=300, show_spinner="Analizando seguridad en Lima...")
-    def obtener_noticias_crimen():
-        lista_noticias = []
-        try:
-            response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
-            
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, 'html.parser')
-                titulares = soup.find_all('h2') 
-                
-                for header in titulares:
-                    enlace = header.find('a')
-                    if enlace:
-                        titulo_texto = enlace.text.strip()
-                        url_noticia = enlace.get('href')
-                        
-                        if url_noticia and not url_noticia.startswith("http"):
-                            url_noticia = "https://rpp.pe" + url_noticia
+    DISTRITOS_INTEGRADOS = [
+        "ancon", "ancón", "carabayllo", "comas", "independencia", "los olivos", "puente piedra", "san martin de porres", "smp", "santa rosa",
+        "ate", "breña", "cercado de lima", "jesus maria", "jesús maría", "la victoria", "lince", "magdalena", "miraflores", "pueblo libre", "rimac", "rímac", "san borja", "san isidro", "san luis", "san miguel", "santa anita", "surquillo",
+        "barranco", "chorrillos", "lurin", "lurín", "pachacamac", "pachacámac", "pucusana", "punta hermosa", "punta negra", "san bartolo", "san juan de miraflores", "sjm", "santiago de surco", "surco", "villa el salvador", "ves", "villa maria del triunfo", "vmt",
+        "chaclacayo", "cieneguilla", "el agustino", "la molina", "lurigancho", "chosica", "san juan de lurigancho", "sjl",
+        "callao", "bellavista", "carmen de la legua", "reynoso", "la perla", "la punta", "ventanilla", "mi peru", "mi perú"
+    ]
 
-                        titulo_lower = titulo_texto.lower()
-                        
-                        # Filtro 1: Palabras Clave
-                        es_crimen = any(palabra in titulo_lower for palabra in PALABRAS_CLAVE)
-                        
-                        if es_crimen:
-                            # Filtro 2: Detección de Distrito
-                            distrito_detectado = "No especificado"
-                            for dist in DISTRITOS_LIMA:
-                                if dist in titulo_lower:
-                                    distrito_detectado = dist.upper()
-                                    break 
+    def buscar_palabra_exacta(texto, lista_palabras):
+        texto = texto.lower()
+        for palabra in lista_palabras:
+            patron = r'\b' + re.escape(palabra) + r'\b'
+            if re.search(patron, texto):
+                return palabra.upper()
+        return None
+
+    @st.cache_data(ttl=300, show_spinner="Analizando RPP...")
+    def escanear_inteligente():
+        noticias_encontradas = []
+        for pagina in range(1, 4): 
+            try:
+                url_paginada = f"{URL_BASE}?page={pagina}"
+                response = requests.get(url_paginada, headers=HEADERS, timeout=10)
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    titulares = soup.find_all(['h2', 'h3'])
+                    for header in titulares:
+                        enlace = header.find('a')
+                        if enlace:
+                            titulo_texto = enlace.text.strip()
+                            url_noticia = enlace.get('href')
+                            if url_noticia and not url_noticia.startswith("http"):
+                                url_noticia = "https://rpp.pe" + url_noticia
                             
-                            lista_noticias.append({
-                                "Titular": titulo_texto,
-                                "Distrito": distrito_detectado,
-                                "Categoría": "Crimen/Seguridad",
-                                "Enlace": url_noticia,
-                                "Hora": pd.Timestamp.now().strftime("%H:%M")
-                            })
-            else:
-                st.error(f"Error conexión: {response.status_code}")
-                
-        except Exception as e:
-            st.error(f"Error scraping: {e}")
-            
-        return pd.DataFrame(lista_noticias)
+                            if any(seccion in url_noticia for seccion in EXCLUSIONES_URL): continue 
+                            if buscar_palabra_exacta(titulo_texto, EXCLUSIONES_TITULO): continue
+                            
+                            distrito = buscar_palabra_exacta(titulo_texto, DISTRITOS_INTEGRADOS)
+                            delito = buscar_palabra_exacta(titulo_texto, PALABRAS_CLAVE)
+                            
+                            ubicacion_final = district if (district := distrito) else "⚠️ No Especificado"
+                            
+                            # Filtro: Distrito O Delito
+                            if distrito or delito:
+                                noticias_encontradas.append({
+                                    "Titular": titulo_texto,
+                                    "Distrito": ubicacion_final,
+                                    "Enlace": url_noticia
+                                })
+                time.sleep(0.5)
+            except Exception:
+                continue
+        return pd.DataFrame(noticias_encontradas)
 
-    # --- INTERFAZ DE RESULTADOS ---
-    col_btn, col_stats = st.columns([1, 4])
-    with col_btn:
-        if st.button("🔄 Actualizar Ahora"):
-            obtener_noticias_crimen.clear()
-            st.rerun()
-            
-    df_crimen = obtener_noticias_crimen()
+    # --- 3. EJECUCIÓN DEL SCRAPING (¡ESTO VA ANTES DE DIBUJAR!) ---
+    df_nuevas = escanear_inteligente()
+    
+    if not df_nuevas.empty:
+        df_total = pd.concat([st.session_state['historial_noticias'], df_nuevas])
+        df_total = df_total.drop_duplicates(subset=["Titular"], keep='last')
+        st.session_state['historial_noticias'] = df_total
 
-    if not df_crimen.empty:
-        df_crimen = df_crimen.sort_values(by="Distrito", ascending=False)
+    # --- 4. INTERFAZ GRÁFICA (Ahora sí dibujamos con los datos listos) ---
+    
+    st.title("🛡️ Monitor de Criminalidad (Lima + Callao)")
+    st.markdown("Visualización en tiempo real de incidentes de seguridad ciudadana reportados por medios digitales.")
+    st.write("---") 
+
+    # ==============================================================================
+    # BLOQUE 1: NOTICIAS RPP
+    # ==============================================================================
+    with st.container(border=True):
+        col_rpp_title, col_rpp_metrics = st.columns([2, 3])
         
-        total_crimenes = len(df_crimen)
-        con_distrito = len(df_crimen[df_crimen["Distrito"] != "No especificado"])
-
-        with col_stats:
-            st.success(f"🚨 Alertas Generadas: {total_crimenes} | 📍 Ubicaciones Confirmadas: {con_distrito}")
-
-        tab1, tab2 = st.tabs(["📋 Listado de Alertas", "📍 Gráfico de Zonas"])
+        with col_rpp_title:
+            st.subheader("📰 Noticias RPP")
         
-        with tab1:
+        with col_rpp_metrics:
+            fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+            # AHORA ESTE NÚMERO SERÁ EL CORRECTO PORQUE YA ACTUALIZAMOS ARRIBA
+            n_noticias = len(st.session_state['historial_noticias'])
+            st.markdown(f"<div style='text-align: right;'>📅 <b>{fecha_hoy}</b> | 🚨 Capturadas: <b>{n_noticias}</b></div>", unsafe_allow_html=True)
+
+        with st.expander("ℹ️ Detalles del Funcionamiento (RPP)", expanded=False):
+            st.markdown("""
+            * ⏱️ **Frecuencia:** Escaneo automático cada **5 minutos**.
+            * 🔍 **Filtro:** Detecta palabras clave (Robo, Sicariato, etc.) y bloquea farándula/deportes.
+            * 📍 **Geo:** Busca coincidencias exactas de los 50 distritos de Lima y Callao.
+            """)
+
+        df_final = st.session_state['historial_noticias']
+
+        if not df_final.empty:
+            df_view = df_final[["Titular", "Distrito", "Enlace"]]
             st.dataframe(
-                df_crimen,
+                df_view,
                 column_config={
-                    "Enlace": st.column_config.LinkColumn("Leer Noticia"),
-                    "Distrito": st.column_config.TextColumn("Distrito", help="Zona detectada en el titular"),
-                    "Titular": st.column_config.TextColumn("Titular", width="large")
+                    "Enlace": st.column_config.LinkColumn("Fuente", display_text="Leer Nota"),
+                    "Distrito": st.column_config.TextColumn("Ubicación", width="medium"),
+                    "Titular": st.column_config.TextColumn("Noticia", width="large"),
                 },
-                use_container_width=True
+                use_container_width=True,
+                hide_index=True 
             )
-            
-        with tab2:
-            df_chart = df_crimen[df_crimen["Distrito"] != "No especificado"]
-            if not df_chart.empty:
-                st.bar_chart(df_chart["Distrito"].value_counts(), color="#D32F2F")
-            else:
-                st.info("No se han detectado distritos específicos en las noticias recientes.")
-    else:
-        st.warning("No se encontraron noticias de riesgo en este momento.")
+        else:
+            st.info("Sin alertas recientes en esta fuente.")
+
+        if st.button("🔄 Escanear RPP", key="scan_rpp"):
+            escanear_inteligente.clear()
+            st.rerun()
 # -----------------------------
 # SECCIÓN 4: EQUIPO
 # -----------------------------
