@@ -197,30 +197,97 @@ elif menu == "Mapa del Crimen":
     st.info("Nota: Este mapa se poblará dinámicamente cuando conectemos el módulo de Web Scraping.")
 
 # -----------------------------
-# SECCIÓN 3: ANÁLISIS POR PERIÓDICO
+# SECCIÓN 3: ANÁLISIS POR PERIÓDICO (CON SCRAPING REAL)
 # -----------------------------
 elif menu == "Análisis por Periódico":
-    st.title("📰 Análisis de Fuentes Periodísticas")
-    st.write("Comparativa de titulares y frecuencia de noticias por medio de comunicación.")
+    st.title("📰 Análisis de Fuentes en Tiempo Real")
+    st.write("Monitor de noticias de RPP. Se actualiza automáticamente cada 5 minutos.")
 
-    # Simulación de pestañas para los periódicos
-    tab1, tab2, tab3 = st.tabs(["El Comercio", "La República", "RPP Noticias"])
+    # Definimos las constantes del Scraping
+    URL_WEB = "https://rpp.pe/ultimas-noticias"
+    PALABRAS_CLAVE = ["robo", "asalto", "delincuencia", "policía", "crimen", "sicario", "balacera", "muerte", "asesinato", "comisaría", "extorsión", "terna"]
+    HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
 
-    with tab1:
-        st.subheader("El Comercio - Sección Sucesos")
-        st.warning("⚠️ Módulo de Scraping pendiente de conexión.")
-        st.code("""
-        # Aquí se mostrará el DataFrame resultante de:
-        # soup.find_all('h2', class_='title')
-        """, language="python")
+    # --- FUNCIÓN DE SCRAPING OPTIMIZADA (TTL=300s = 5 minutos) ---
+    @st.cache_data(ttl=300, show_spinner="Escaneando RPP Noticias...")
+    def obtener_noticias_rpp():
+        lista_noticias = []
+        try:
+            # Hacemos la petición
+            response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                # Buscamos h2 y h3 que suelen ser titulares en RPP
+                titulares = soup.find_all(['h2', 'h3'])
+                
+                for header in titulares:
+                    enlace = header.find('a')
+                    if enlace:
+                        titulo_texto = enlace.text.strip()
+                        url_noticia = enlace.get('href')
+                        
+                        # Corregir enlace si es relativo (no tiene https)
+                        if url_noticia and not url_noticia.startswith("http"):
+                            url_noticia = "https://rpp.pe" + url_noticia
+                        
+                        # FILTRO: Buscar palabras clave
+                        if any(palabra in titulo_texto.lower() for palabra in PALABRAS_CLAVE):
+                            lista_noticias.append({
+                                "Titular": titulo_texto,
+                                "Categoría": "Seguridad/Policial",
+                                "Enlace": url_noticia,
+                                "Hora Detección": pd.Timestamp.now().strftime("%H:%M")
+                            })
+            else:
+                st.error(f"Error al conectar con RPP: Código {response.status_code}")
+                
+        except Exception as e:
+            st.error(f"Error inesperado en el scraping: {e}")
+            
+        # Retornamos un DataFrame (Tabla)
+        return pd.DataFrame(lista_noticias)
+
+    # --- INTERFAZ DE USUARIO ---
+    
+    # 1. Botón de actualización manual
+    col_btn, col_info = st.columns([1, 4])
+    with col_btn:
+        if st.button("🔄 Actualizar Ahora"):
+            obtener_noticias_rpp.clear() # Limpia la memoria caché
+            st.rerun() # Recarga la app
+            
+    # 2. Ejecutar (o traer de memoria) el scraping
+    df_noticias = obtener_noticias_rpp()
+
+    # 3. Mostrar resultados
+    if not df_noticias.empty:
+        with col_info:
+            st.success(f"✅ Última actualización: {pd.Timestamp.now().strftime('%H:%M:%S')} | Noticias encontradas: {len(df_noticias)}")
         
-    with tab2:
-        st.subheader("La República - Sección Sociedad")
-        st.warning("⚠️ Módulo de Scraping pendiente de conexión.")
+        # Pestañas para organizar la vista
+        tab1, tab2 = st.tabs(["📋 Listado de Noticias", "📊 Estadísticas"])
         
-    with tab3:
-        st.subheader("RPP - Sección Policiales")
-        st.warning("⚠️ Módulo de Scraping pendiente de conexión.")
+        with tab1:
+            # Mostramos la tabla interactiva
+            st.dataframe(
+                df_noticias, 
+                column_config={
+                    "Enlace": st.column_config.LinkColumn("Leer Noticia")
+                },
+                use_container_width=True
+            )
+            
+        with tab2:
+            st.metric("Total Alertas de Seguridad", len(df_noticias))
+            # Un gráfico simple de conteo (en este caso todas son de seguridad, pero sirve de ejemplo)
+            st.bar_chart(df_noticias["Categoría"].value_counts())
+            
+    else:
+        st.warning("⚠️ Se escaneó RPP correctamente, pero no se encontraron noticias con palabras clave de seguridad en la portada.")
+        st.info(f"Palabras buscadas: {', '.join(PALABRAS_CLAVE)}")
 
 # -----------------------------
 # SECCIÓN 4: EQUIPO
