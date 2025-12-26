@@ -26,17 +26,6 @@ Nuestra solución está desplegada como un dashboard interactivo usando Streamli
 
 ---
 
-## 🎥 Video Demo
-
-Mira nuestra presentación donde explicamos cómo el algoritmo detecta noticias y genera las alertas en el mapa.
-
-*Haz clic en la imagen para ver el video en YouTube:*
-
-[![Video Demo de Lima Segura](https://img.youtube.com/vi/TU_VIDEO_ID/0.jpg)](https://youtube.com/watch?v=TU_VIDEO_ID)
-
-*(Reemplaza el ID del video cuando lo subas a YouTube)*
-
----
 
 ## 🛠️ Tecnologías Utilizadas
 
@@ -62,17 +51,4 @@ Proyecto desarrollado por estudiantes de **Ingeniería Estadística e Informáti
 
 ---
 
-### 💻 Cómo ejecutar este proyecto localmente
 
-1.  Clona el repositorio:
-    ```bash
-    git clone [https://github.com/Orsaki/lima-segura.git](https://github.com/Orsaki/lima-segura.git)
-    ```
-2.  Instala las dependencias:
-    ```bash
-    pip install -r requirements.txt
-    ```
-3.  Ejecuta la aplicación:
-    ```bash
-    streamlit run app_streamlit.py
-    ```
