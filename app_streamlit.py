@@ -173,7 +173,6 @@ with st.sidebar:
 # SECCIÓN 1: INICIO (Contexto Teórico)
 # -----------------------------
 if menu == "Inicio":
-    # 1. Título Actualizado
     st.markdown('<h1 class="main-title">SISTEMA DE ALERTA DE DELITOS Y ZONAS PELIGROSAS</h1>', unsafe_allow_html=True)
     st.markdown('<p class="subtitle">Monitor de Criminalidad basado en Web Scraping y Geolocalización</p>', unsafe_allow_html=True)
 
