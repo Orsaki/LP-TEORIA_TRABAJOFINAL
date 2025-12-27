@@ -1,43 +1,65 @@
 import requests
 from bs4 import BeautifulSoup
-import csv
-from config import HEADERS, PALABRAS_CLAVE
+import re
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from config import HEADERS, PALABRAS_CLAVE, DISTRITOS_INTEGRADOS
+
 URL_WEB = "https://www.infobae.com/peru/"
-NOMBRE_ARCHIVO = "noticias_infobae_filtradas.csv"
 
 
-def extraer_noticias_infobae():
-    print("📡 Navegando en Infobae Perú...")
-
-    response = requests.get(URL_WEB, headers=HEADERS)
-
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.content, "html.parser")
-
-        articulos = soup.find_all("article")
-
-        with open(NOMBRE_ARCHIVO, "w", newline="", encoding="utf-8") as file:
-            writer = csv.writer(file)
-            writer.writerow(["Titulo", "Link", "Fuente"])
-
-            contador = 0
-            for art in articulos:
-                h = art.find("h2")
-                a = art.find("a")
-
-                if h and a:
-                    titulo = h.text.strip()
-                    link = a.get("href")
-
-                    if any(p in titulo.lower() for p in PALABRAS_CLAVE):
-                        writer.writerow([titulo, link, "Infobae Perú"])
-                        contador += 1
-                        print(f"   ➤ {titulo[:60]}")
-
-        print(f"✅ {contador} noticias guardadas")
-    else:
-        print("❌ Error al acceder a Infobae")
+def buscar_palabra_exacta(texto, lista):
+    texto = texto.lower()
+    for palabra in lista:
+        patron = r'\b' + re.escape(palabra) + r'\b'
+        if re.search(patron, texto):
+            return palabra.upper()
+    return None
 
 
-if __name__ == "__main__":
-    extraer_noticias_infobae()
+def obtener_noticias():
+    noticias = []
+    print("📡 Escaneando Infobae Perú...")
+
+    try:
+        response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
+
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, "html.parser")
+            bloques = soup.find_all(["article", "div"])
+
+            for b in bloques:
+                h = b.find(["h2", "h3"])
+                a = b.find("a")
+
+                if not h or not a:
+                    continue
+
+                titulo = h.get_text(strip=True)
+                url = a.get("href")
+
+                if not titulo or len(titulo) < 15 or not url:
+                    continue
+
+                if not url.startswith("http"):
+                    url = "https://www.infobae.com" + url
+
+                delito = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
+                distrito = buscar_palabra_exacta(titulo, DISTRITOS_INTEGRADOS)
+
+                if delito:
+                    noticias.append({
+                        "Titular": titulo,
+                        "Enlace": url,
+                        "Fuente": "Infobae Perú",
+                        "Distrito": distrito if distrito else "⚠️ No Especificado",
+                        "Categoría": delito
+                    })
+
+    except Exception as e:
+        print(f"❌ Error en Infobae: {e}")
+
+    print(f"✅ Infobae: {len(noticias)} noticias detectadas")
+    return noticias
