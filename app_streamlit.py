@@ -251,9 +251,6 @@ if menu == "Inicio":
         """, unsafe_allow_html=True)
 
 # -----------------------------
-# SECCIÓN 2: MAPA (Placeholder Pydeck)
-# -----------------------------
-# -----------------------------
 # SECCIÓN 2: MAPA (CONEXIÓN DINÁMICA)
 # -----------------------------
 elif menu == "Mapa del Crimen":
@@ -318,9 +315,7 @@ elif menu == "Mapa del Crimen":
             st.success(f"Enfocado en: {distrito_sel}. Mostrando {len(df_final)} alertas.")
         else:
             st.warning("⚠️ Sin datos. Ve a 'Análisis por Periódico' y pulsa 'Escanear RPP'.") 
-# -----------------------------
-# SECCIÓN 3: ANÁLISIS POR PERIÓDICO (LÓGICA CORREGIDA)
-# -----------------------------
+
 # -----------------------------
 # SECCIÓN 3: ANÁLISIS POR PERIÓDICO (UNIFICADO)
 # -----------------------------
@@ -351,6 +346,26 @@ elif menu == "Análisis por Periódico":
 
         # Mostrar la tabla con los datos actuales
         df_final = st.session_state['historial_noticias']
+        # --- NUEVO: Gráfico de Barras ---
+        if not df_final.empty:
+            st.write("---")
+            st.subheader("📊 Estadísticas por Distrito")
+            
+            # Contamos cuántas noticias hay por distrito (ignorando los No Especificados)
+            df_stats = df_final[df_final['Distrito'] != "⚠️ No Especificado"]
+            conteo_distritos = df_stats['Distrito'].value_counts().reset_index()
+            conteo_distritos.columns = ['Distrito', 'Alertas']
+
+            # Creamos el gráfico con Plotly
+            fig = px.bar(
+                conteo_distritos, 
+                x='Distrito', 
+                y='Alertas',
+                title="Cantidad de Incidentes Reportados por Distrito",
+                color='Alertas',
+                color_continuous_scale='Reds'
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
         if not df_final.empty:
             st.dataframe(
