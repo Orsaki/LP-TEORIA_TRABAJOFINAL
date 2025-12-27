@@ -262,9 +262,20 @@ elif menu == "Mapa del Crimen":
 
     with col_control:
         st.subheader("Filtros")
-        # 1. Guardamos el distrito seleccionado en una variable
         distrito_sel = st.selectbox("Seleccionar Distrito", ["Todos"] + list(COORDENADAS_LIMA.keys()))
         
+        # --- AGREGA ESTO AQUÍ ---
+        st.write("---")
+        opcion_gravedad = st.radio("Gravedad de Alerta:", ["Todos", "Solo Críticos", "Otros"])
+        
+        st.write("---")
+        opcion_fuente = st.multiselect(
+            "Filtrar por Periódico:", 
+            ["RPP", "El Comercio", "La República"], 
+            default=["RPP", "El Comercio", "La República"]
+        )
+        # ------------------------
+
         if st.button("Actualizar Vista"):
             st.toast("Cambiando enfoque...", icon="🔍")
 
