@@ -309,12 +309,12 @@ elif menu == "Análisis por Periódico":
                 fig2 = px.pie(conteo_tipo, names='Categoría',
                               values='Cantidad', hole=0.4, title="Tipos de Delito")
                 st.plotly_chart(fig2, use_container_width=True)
+        st.dataframe(
+            df_viz[['Titular', 'Categoría', 'Distrito', 'Fuente']],
+            hide_index=True,
+            use_container_width=True)
 
-        st.dataframe(df_viz[['Categoría', 'Distrito', 'Titular',
-                     'Fuente']], hide_index=True, use_container_width=True)
-
-
-# ==============================================================================
+# =======================================================================
 #  EQUIPO Y EMERGENCIAS
 # =======================================================================
 
