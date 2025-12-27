@@ -1,54 +1,59 @@
 import requests
 from bs4 import BeautifulSoup
-import csv
-from config import HEADERS, PALABRAS_CLAVE
+import re
+import sys
+import os
+
+# conexión config
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from config import HEADERS, PALABRAS_CLAVE, DISTRITOS_INTEGRADOS
+
 URL_WEB = "https://larepublica.pe/sociedad"
-NOMBRE_ARCHIVO = "noticias_larepublica_filtradas.csv"
 
+def buscar_palabra_exacta(texto, lista):
+    texto = texto.lower()
+    for palabra in lista:
+        if re.search(r'\b' + re.escape(palabra) + r'\b', texto):
+            return palabra.upper()
+    return None
 
-def extraer_noticias_larepublica():
-    print(f"📡 Navegando en La República: {URL_WEB}...")
+def obtener_noticias():
+    noticias = []
+    print("📡 Escaneando La República...")
+
     try:
-        response = requests.get(URL_WEB, headers=HEADERS)
+        response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
+            elementos = soup.find_all(['h2', 'h3'])
 
-            # Buscamos todos los enlaces que suelen contener los títulos en La República
-            # Intentamos con h2 y h3 que son los más comunes para titulares
-            titulares = soup.find_all(['h2', 'h3'])
+            for item in elementos:
+                a = item.find('a')
+                if not a:
+                    continue
 
-            print(f"👀 Analizando {len(titulares)} posibles titulares...")
+                titulo = a.text.strip()
+                link = a.get('href')
 
-            with open(NOMBRE_ARCHIVO, mode='w', newline='', encoding='utf-8') as file:
-                writer = csv.writer(file)
-                writer.writerow(["Titulo", "Link", "Fuente"])
+                if not link or len(titulo) < 15:
+                    continue
 
-                contador = 0
-                for item in titulares:
-                    enlace = item.find('a')
-                    if enlace:
-                        titulo_texto = enlace.text.strip()
-                        url_noticia = enlace.get('href')
+                if not link.startswith("http"):
+                    link = "https://larepublica.pe" + link
 
-                        # Completar URL si es relativa
-                        if url_noticia and not url_noticia.startswith('http'):
-                            url_noticia = "https://larepublica.pe" + url_noticia
+                delito = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
+                distrito = buscar_palabra_exacta(titulo, DISTRITOS_INTEGRADOS)
 
-                        titulo_lower = titulo_texto.lower()
+                if delito:
+                    noticias.append({
+                        "Titular": titulo,
+                        "Enlace": link,
+                        "Fuente": "La República",
+                        "Distrito": distrito if distrito else "⚠️ No Especificado",
+                        "Categoría": delito
+                    })
 
-                        # Filtro de seguridad
-                        if any(palabra in titulo_lower for palabra in PALABRAS_CLAVE):
-                            writer.writerow(
-                                [titulo_texto, url_noticia, "La República"])
-                            contador += 1
-                            print(f"   -> OK: {titulo_texto[:50]}...")
-
-            print(f"🎉 ¡Éxito! Se encontraron {contador} noticias relevantes.")
-        else:
-            print(f"❌ Error de conexión: {response.status_code}")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print("❌ Error La República:", e)
 
-
-if __name__ == "__main__":
-    extraer_noticias_larepublica()
+    return noticias
