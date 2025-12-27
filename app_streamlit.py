@@ -5,16 +5,107 @@ import pydeck as pdk
 import plotly.express as px
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime 
+import time
+import re
+# --- COORDENADAS DE DISTRITOS 
 
+COORDENADAS_LIMA = {
+    "ANCON": [-11.7731, -77.1758], "ATE": [-12.0253, -76.9204], "BARRANCO": [-12.1481, -77.0211],
+    "BREÑA": [-12.0601, -77.0450], "CARABAYLLO": [-11.8481, -77.0286], "CHACLACAYO": [-11.9723, -76.7694],
+    "CHORRILLOS": [-12.1750, -77.0175], "CIENEGUILLA": [-12.0911, -76.7725], "COMAS": [-11.9333, -77.0433],
+    "EL AGUSTINO": [-12.0461, -77.0031], "INDEPENDENCIA": [-11.9925, -77.0494], "JESUS MARIA": [-12.0753, -77.0450],
+    "LA MOLINA": [-12.0725, -76.9419], "LA VICTORIA": [-12.0651, -77.0309], "LINCE": [-12.0847, -77.0347],
+    "LOS OLIVOS": [-11.9922, -77.0709], "LURIGANCHO": [-11.9442, -76.8406], "CHOSICA": [-11.9442, -76.8406],
+    "LURIN": [-12.2742, -76.8669], "MAGDALENA": [-12.0914, -77.0694], "MIRAFLORES": [-12.1211, -77.0297],
+    "PUEBLO LIBRE": [-12.0736, -77.0625], "PUENTE PIEDRA": [-11.8661, -77.0764], "RIMAC": [-12.0294, -77.0286],
+    "SAN BORJA": [-12.1064, -76.9933], "SAN ISIDRO": [-12.0950, -77.0347], "SAN JUAN DE LURIGANCHO": [-11.9764, -77.0002],
+    "SAN JUAN DE MIRAFLORES": [-12.1497, -76.9669], "SAN LUIS": [-12.0750, -76.9958],
+    "SAN MARTIN DE PORRES": [-12.0053, -77.0583],"SAN MIGUEL": [-12.0775, -77.0917],
+    "SANTA ANITA": [-12.0439, -76.9686], "SURCO": [-12.1456, -76.9789], "SANTIAGO DE SURCO": [-12.1456, -76.9789],
+    "SURQUILLO": [-12.1133, -77.0225], "VILLA EL SALVADOR": [-12.2133, -76.9367],
+    "VILLA MARIA DEL TRIUNFO": [-12.1603, -76.9294], "CERCADO DE LIMA": [-12.0464, -77.0428],
+    "CALLAO": [-12.0566, -77.1181], "VENTANILLA": [-11.8753, -77.1256], "LA PERLA": [-12.0675, -77.1025]
+}
 
-# -----------------------------
-# CONFIGURACIÓN DE LA PÁGINA
-# -----------------------------
 st.set_page_config(
     page_title="Lima Segura: Monitor de Criminalidad", 
     page_icon="🚨", 
     layout="wide"
 )
+# --- 2. HERRAMIENTAS DE BÚSQUEDA (Mover aquí arriba) ---
+# --- NUEVAS FUENTES DE NOTICIAS ---
+FUENTES = {
+    "RPP": "https://rpp.pe/tema/inseguridad-ciudadana",
+    "El Comercio": "https://elcomercio.pe/lima/policiales/",
+    "La República": "https://larepublica.pe/sociedad/"
+}
+
+HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+
+PALABRAS_CLAVE = ["robo", "asalto", "delincuencia", "policia", "policía", "crimen", "sicario", 
+                  "balacera", "muerte", "asesinato", "extorsion", "extorsión", "homicidio", "atraco"]
+
+DISTRITOS_INTEGRADOS = [d.lower() for d in COORDENADAS_LIMA.keys()]
+
+def buscar_palabra_exacta(texto, lista_palabras):
+    texto = texto.lower()
+    for palabra in lista_palabras:
+        patron = r'\b' + re.escape(palabra) + r'\b'
+        if re.search(patron, texto):
+            return palabra.upper()
+    return None
+
+@st.cache_data(ttl=300)
+def escanear_inteligente():
+    noticias_encontradas = []
+    
+    # Recorremos cada periódico definido en el diccionario FUENTES
+    for nombre_fuente, url_base in FUENTES.items():
+        try:
+            response = requests.get(url_base, headers=HEADERS, timeout=10)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Buscamos titulares en etiquetas comunes (h2 y h3)
+                titulares = soup.find_all(['h2', 'h3'])
+                
+                for header in titulares:
+                    enlace = header.find('a')
+                    if enlace:
+                        titulo_texto = enlace.text.strip()
+                        path = enlace.get('href')
+                        
+                        # Construir URL completa según la fuente
+                        if path.startswith("http"):
+                            url_noticia = path
+                        elif nombre_fuente == "RPP":
+                            url_noticia = "https://rpp.pe" + path
+                        elif nombre_fuente == "El Comercio":
+                            url_noticia = "https://elcomercio.pe" + path
+                        else:
+                            url_noticia = "https://larepublica.pe" + path
+                        
+                        # Aplicar tu lógica de detección de distritos
+                        distrito = buscar_palabra_exacta(titulo_texto, DISTRITOS_INTEGRADOS)
+                        
+                        if distrito:
+                            noticias_encontradas.append({
+                                "Titular": f"[{nombre_fuente}] {titulo_texto}",
+                                "Distrito": distrito,
+                                "Enlace": url_noticia,
+                                "Fuente": nombre_fuente
+                            })
+        except Exception as e:
+            print(f"Error escaneando {nombre_fuente}: {e}")
+            continue
+            
+    return pd.DataFrame(noticias_encontradas)
+
+# --- 3. MEMORIA COMPARTIDA (Session State) ---
+if 'historial_noticias' not in st.session_state:
+    # La primera vez que carga, busca noticias automáticamente
+    st.session_state['historial_noticias'] = escanear_inteligente()
 
 # -----------------------------
 # ESTILOS CSS PERSONALIZADOS (Tema: Alerta/Noticias)
@@ -131,7 +222,7 @@ if menu == "Inicio":
         st.markdown("""
         <div class="kpi-card">
             <h3>🗞️ Fuentes</h3>
-            <p>Monitoreo activo de <b>3 periódicos</b> principales del país.</p>
+            <p>Monitoreo activo de <b>3 periódicos</b> (RPP, El Comercio, La República).</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -162,54 +253,126 @@ if menu == "Inicio":
 # -----------------------------
 # SECCIÓN 2: MAPA (Placeholder Pydeck)
 # -----------------------------
+# -----------------------------
+# SECCIÓN 2: MAPA (CONEXIÓN DINÁMICA)
+# -----------------------------
 elif menu == "Mapa del Crimen":
-    st.title("📍 Mapa de Incidencias en Lima")
-    st.write("Visualización geoespacial de las noticias extraídas. Los puntos brillantes indican noticias recientes.")
+    st.title("📍 Alerta de Delitos en Tiempo Real")
+    
+    df_noticias = st.session_state.get('historial_noticias', pd.DataFrame())
 
     col_control, col_map = st.columns([1, 4])
 
     with col_control:
         st.subheader("Filtros")
-        st.selectbox("Seleccionar Distrito", ["Todos", "San Juan de Lurigancho", "Miraflores", "Los Olivos", "Cercado"])
-        st.selectbox("Tipo de Delito", ["Todos", "Robo", "Asalto", "Homicidio", "Extorsión"])
-        st.slider("Rango de tiempo (días)", 1, 30, 7)
-        if st.button("Actualizar Mapa"):
-            st.toast("Actualizando datos desde la web...", icon="🔄")
+        # 1. Guardamos el distrito seleccionado en una variable
+        distrito_sel = st.selectbox("Seleccionar Distrito", ["Todos"] + list(COORDENADAS_LIMA.keys()))
+        
+        if st.button("Actualizar Vista"):
+            st.toast("Cambiando enfoque...", icon="🔍")
 
     with col_map:
-        # --- CONFIGURACIÓN DEL MAPA VACÍO (POR AHORA) ---
-        # Coordenadas centrales de Lima
-        INITIAL_VIEW_STATE = pdk.ViewState(
-            latitude=-12.0464,
-            longitude=-77.0428,
-            zoom=11,
-            pitch=50,
-        )
+        # 2. LÓGICA DE ENFOQUE (Zoom dinámico)
+        # Si selecciona un distrito, usamos sus coordenadas; si es "Todos", usamos el centro de Lima.
+        if distrito_sel != "Todos":
+            coords_foco = COORDENADAS_LIMA[distrito_sel]
+            zoom_actual = 14  # Más cerca para ver el distrito
+        else:
+            coords_foco = [-12.0464, -77.0428] # Centro de Lima
+            zoom_actual = 10.5 # Vista general
 
-        # Aquí más adelante insertaremos tu DataFrame con lat/lon
-        # Por ahora creamos un mapa base estilo "Dark" (mejor para ver luces)
-        r = pdk.Deck(
-            map_style='mapbox://styles/mapbox/dark-v10', # Estilo oscuro
-            initial_view_state=INITIAL_VIEW_STATE,
-            tooltip={"text": "Lima"},
-            layers=[] # Aquí irán tus capas de ScatterplotLayer más adelante
-        )
-        
-        st.pydeck_chart(r)
-        
-    st.info("Nota: Este mapa se poblará dinámicamente cuando conectemos el módulo de Web Scraping.")
+        if not df_noticias.empty:
+            df_mapa = df_noticias.copy()
+            def get_lat_lon(dist):
+                name = dist.replace("⚠️ ", "").strip().upper()
+                return COORDENADAS_LIMA.get(name, [None, None])
 
+            df_mapa['coords'] = df_mapa['Distrito'].apply(get_lat_lon)
+            df_mapa['lat'] = df_mapa['coords'].apply(lambda x: x[0])
+            df_mapa['lon'] = df_mapa['coords'].apply(lambda x: x[1])
+            df_final = df_mapa.dropna(subset=['lat'])
+
+            # 3. DIBUJAR MAPA CON VISTA DINÁMICA
+            st.pydeck_chart(pdk.Deck(
+                map_style='road', # O 'mapbox://styles/mapbox/dark-v10' si tienes Token
+                initial_view_state=pdk.ViewState(
+                    latitude=coords_foco[0], # <--- Usa la latitud del distrito
+                    longitude=coords_foco[1], # <--- Usa la longitud del distrito
+                    zoom=zoom_actual,         # <--- Cambia el zoom
+                    pitch=45
+                ),
+                layers=[
+                    pdk.Layer(
+                        "ScatterplotLayer",
+                        df_final,
+                        get_position='[lon, lat]',
+                        get_color='[255, 0, 0, 180]',
+                        get_radius=150, # Radio pequeño para precisión
+                        pickable=True,
+                        radius_min_pixels=4,
+                        radius_max_pixels=10
+                    ),
+                ],
+                tooltip={"text": "{Titular}\nUbicación: {Distrito}"}
+            ))
+            st.success(f"Enfocado en: {distrito_sel}. Mostrando {len(df_final)} alertas.")
+        else:
+            st.warning("⚠️ Sin datos. Ve a 'Análisis por Periódico' y pulsa 'Escanear RPP'.") 
 # -----------------------------
 # SECCIÓN 3: ANÁLISIS POR PERIÓDICO (LÓGICA CORREGIDA)
 # -----------------------------
+# -----------------------------
+# SECCIÓN 3: ANÁLISIS POR PERIÓDICO (UNIFICADO)
+# -----------------------------
 elif menu == "Análisis por Periódico":
-    from datetime import datetime 
-    import time
-    import re 
-    
-    # --- 1. MEMORIA (SESSION STATE) ---
-    if 'historial_noticias' not in st.session_state:
-        st.session_state['historial_noticias'] = pd.DataFrame(columns=["Titular", "Distrito", "Enlace"])
+    st.title("🛡️ Monitor de Criminalidad (Lima + Callao)")
+    st.markdown("Visualización de incidentes reportados por RPP, El Comercio y La República.")
+    st.write("---") 
+
+    # --- BLOQUE DE NOTICIAS Y MÉTRICAS ---
+    with st.container(border=True):
+        col_title, col_metrics = st.columns([2, 1])
+        
+        with col_title:
+            st.subheader("📰 Noticias Actuales")
+        
+        with col_metrics:
+            fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+            # Obtenemos la cantidad de noticias capturadas en la sesión
+            n_noticias = len(st.session_state['historial_noticias'])
+            st.markdown(f"<div style='text-align: right;'>📅 <b>{fecha_hoy}</b> | 🚨 Capturadas: <b>{n_noticias}</b></div>", unsafe_allow_html=True)
+
+        with st.expander("ℹ️ Detalles de la búsqueda multifuente", expanded=False):
+            st.markdown("""
+            * 🔍 **Fuentes:** Escaneo activo de RPP, El Comercio y La República.
+            * 📍 **Geolocalización:** Filtro automático por distritos de Lima Metropolitana.
+            * ⏱️ **Actualización:** El sistema busca noticias nuevas cada vez que presionas el botón.
+            """)
+
+        # Mostrar la tabla con los datos actuales
+        df_final = st.session_state['historial_noticias']
+
+        if not df_final.empty:
+            st.dataframe(
+                df_final,
+                column_config={
+                    "Enlace": st.column_config.LinkColumn("Fuente", display_text="Leer Nota"),
+                    "Distrito": st.column_config.TextColumn("Ubicación", width="medium"),
+                    "Titular": st.column_config.TextColumn("Noticia", width="large"),
+                    "Fuente": st.column_config.TextColumn("Periódico")
+                },
+                use_container_width=True,
+                hide_index=True 
+            )
+        else:
+            st.info("Sin alertas recientes capturadas. Presiona el botón para escanear.")
+
+        # Botón de escaneo único
+        if st.button("🔄 Escanear Noticias Ahora", key="scan_full"):
+            st.cache_data.clear()
+            # Esta función ya debe incluir la lógica para los 3 periódicos que vimos antes
+            st.session_state['historial_noticias'] = escanear_inteligente()
+            st.rerun()
 
     # --- 2. CONSTANTES Y FUNCIONES (Las definimos primero) ---
     URL_BASE = "https://rpp.pe/tema/inseguridad-ciudadana"
@@ -301,48 +464,6 @@ elif menu == "Análisis por Periódico":
     st.markdown("Visualización en tiempo real de incidentes de seguridad ciudadana reportados por medios digitales.")
     st.write("---") 
 
-    # ==============================================================================
-    # BLOQUE 1: NOTICIAS RPP
-    # ==============================================================================
-    with st.container(border=True):
-        col_rpp_title, col_rpp_metrics = st.columns([2, 3])
-        
-        with col_rpp_title:
-            st.subheader("📰 Noticias RPP")
-        
-        with col_rpp_metrics:
-            fecha_hoy = datetime.now().strftime("%d/%m/%Y")
-            # AHORA ESTE NÚMERO SERÁ EL CORRECTO PORQUE YA ACTUALIZAMOS ARRIBA
-            n_noticias = len(st.session_state['historial_noticias'])
-            st.markdown(f"<div style='text-align: right;'>📅 <b>{fecha_hoy}</b> | 🚨 Capturadas: <b>{n_noticias}</b></div>", unsafe_allow_html=True)
-
-        with st.expander("ℹ️ Detalles del Funcionamiento (RPP)", expanded=False):
-            st.markdown("""
-            * ⏱️ **Frecuencia:** Escaneo automático cada **5 minutos**.
-            * 🔍 **Filtro:** Detecta palabras clave (Robo, Sicariato, etc.) y bloquea farándula/deportes.
-            * 📍 **Geo:** Busca coincidencias exactas de los 50 distritos de Lima y Callao.
-            """)
-
-        df_final = st.session_state['historial_noticias']
-
-        if not df_final.empty:
-            df_view = df_final[["Titular", "Distrito", "Enlace"]]
-            st.dataframe(
-                df_view,
-                column_config={
-                    "Enlace": st.column_config.LinkColumn("Fuente", display_text="Leer Nota"),
-                    "Distrito": st.column_config.TextColumn("Ubicación", width="medium"),
-                    "Titular": st.column_config.TextColumn("Noticia", width="large"),
-                },
-                use_container_width=True,
-                hide_index=True 
-            )
-        else:
-            st.info("Sin alertas recientes en esta fuente.")
-
-        if st.button("🔄 Escanear RPP", key="scan_rpp"):
-            escanear_inteligente.clear()
-            st.rerun()
 # -----------------------------
 # SECCIÓN 4: EQUIPO
 # -----------------------------
