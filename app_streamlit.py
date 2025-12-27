@@ -3,15 +3,37 @@ from streamlit_option_menu import option_menu
 import pandas as pd
 import pydeck as pdk
 import plotly.express as px
-import requests
-from bs4 import BeautifulSoup
-from datetime import datetime
-import time
 import re
 
-# -----------------------------
-# 1. COORDENADAS DE DISTRITOS
-# -----------------------------
+# ==============================================================================
+# 1. IMPORTACIÓN DE MÓDULOS DE TU CARPETA WEBSCRAPING
+# ==============================================================================
+# Asegúrate de que tu carpeta 'webscraping' tenga el archivo __init__.py
+# y que los nombres de los archivos .py coincidan EXACTAMENTE con estos imports:
+try:
+    from webscraping import (
+        webscraping_rpp, 
+        web_scraping_el_comercio, 
+        webscraping_canalN, 
+        webscraping_diariocorreo, 
+        webscraping_infobaePE, 
+        webscraping_larepublica, 
+        webscraping_peru21
+    )
+    MODULES_AVAILABLE = True
+except ImportError as e:
+    MODULES_AVAILABLE = False
+    print(f"Error importando módulos: {e}")
+
+# ==============================================================================
+# 2. CONFIGURACIÓN Y COORDENADAS
+# ==============================================================================
+st.set_page_config(page_title="Lima Segura: Monitor", page_icon="🚨", layout="wide")
+
+if 'historial_noticias' not in st.session_state:
+    st.session_state['historial_noticias'] = pd.DataFrame()
+
+# Coordenadas de distritos (Tu base de datos geoespacial)
 COORDENADAS_LIMA = {
     "ANCON": [-11.7731, -77.1758], "ATE": [-12.0253, -76.9204], "BARRANCO": [-12.1481, -77.0211],
     "BREÑA": [-12.0601, -77.0450], "CARABAYLLO": [-11.8481, -77.0286], "CHACLACAYO": [-11.9723, -76.7694],
@@ -31,111 +53,87 @@ COORDENADAS_LIMA = {
     "VENTANILLA": [-11.8753, -77.1256], "LA PERLA": [-12.0675, -77.1025]
 }
 
-# --- 2. FUENTES ---
-FUENTES = {
-    "RPP": "https://rpp.pe/tema/inseguridad-ciudadana",
-    "El Comercio": "https://elcomercio.pe/lima/policiales/",
-    "La República": "https://larepublica.pe/sociedad/",
-    "Canal N": "https://canaln.pe/noticias/policiales",
-    "Diario Correo": "https://diariocorreo.pe/peru/",
-    "Perú 21": "https://peru21.pe/lima/",
-    "Infobae": "https://www.infobae.com/peru/"
-}
+# ==============================================================================
+# 3. FUNCIÓN DE ESCANEO MODULAR (LA NUEVA LÓGICA)
+# ==============================================================================
+@st.cache_data(ttl=300, show_spinner="Ejecutando scrapers de la carpeta 'webscraping'...")
+def escanear_con_archivos_propios():
+    if not MODULES_AVAILABLE:
+        st.error("⚠️ No se pudieron importar los módulos de scraping. Verifica que la carpeta 'webscraping' tenga el archivo __init__.py y los scripts .py correctos.")
+        return pd.DataFrame()
 
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-}
+    todas_las_noticias = []
+    
+    # Lista de tus módulos importados arriba
+    # Asegúrate de que CADA UNO tenga una función que retorne datos (ej: obtener_noticias)
+    mis_scrapers = [
+        ("RPP", webscraping_rpp),
+        ("El Comercio", web_scraping_el_comercio),
+        ("Canal N", webscraping_canalN),
+        ("Diario Correo", webscraping_diariocorreo),
+        ("Infobae", webscraping_infobaePE),
+        ("La República", webscraping_larepublica),
+        ("Perú 21", webscraping_peru21)
+    ]
 
-PALABRAS_CLAVE = ["robo", "asalto", "delincuencia", "policia", "policía", "crimen", "sicario",
-                  "balacera", "muerte", "asesinato", "extorsion", "extorsión", "homicidio", "atraco", "arma", "droga"]
+    # Barra de progreso visual
+    progress_bar = st.progress(0, text="Iniciando escaneo modular...")
+    total = len(mis_scrapers)
 
-DISTRITOS_INTEGRADOS = [d.lower() for d in COORDENADAS_LIMA.keys()]
-
-
-def buscar_palabra_exacta(texto, lista_palabras):
-    texto = texto.lower()
-    for palabra in lista_palabras:
-        patron = r'\b' + re.escape(palabra) + r'\b'
-        if re.search(patron, texto):
-            return palabra.upper()
-    return None
-
-
-@st.cache_data(ttl=300, show_spinner="Escaneando las 7 fuentes de noticias... (Esto puede tardar unos segundos)")
-def escanear_inteligente():
-    noticias_encontradas = []
-
-    for nombre_fuente, url_base in FUENTES.items():
+    for i, (nombre_web, modulo) in enumerate(mis_scrapers):
         try:
-            response = requests.get(url_base, headers=HEADERS, timeout=5)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, 'html.parser')
-                elementos = soup.find_all(['h2', 'h3', 'article'])
+            # Actualizamos barra
+            progress_bar.progress(int(((i)/total)*100), text=f"Ejecutando script: {nombre_web}...")
+            
+            # --- PUNTO CLAVE: LLAMADA A LA FUNCIÓN DEL ARCHIVO ---
+            # Aquí asumimos que todos los archivos tienen una función llamada 'obtener_noticias()'
+            # Si tus amigos le pusieron otro nombre (ej: scrap_data()), cambia esto.
+            try:
+                if hasattr(modulo, 'obtener_noticias'):
+                    datos = modulo.obtener_noticias()
+                elif hasattr(modulo, 'scrape'): # Por si acaso le pusieron scrape
+                    datos = modulo.scrape()
+                else:
+                    # Intento genérico o skip
+                    st.warning(f"El archivo de {nombre_web} no tiene la función 'obtener_noticias'.")
+                    continue
+            except Exception as e_func:
+                st.warning(f"Error ejecutando función en {nombre_web}: {e_func}")
+                continue
 
-                for item in elementos:
-                    enlace = item.find('a')
-                    if not enlace:
-                        enlace = item if item.name == 'a' else None
-
-                    if enlace:
-                        titulo_texto = enlace.text.strip()
-                        path = enlace.get('href')
-
-                        if not path or len(titulo_texto) < 10:
-                            continue
-
-                        if path.startswith("http"):
-                            url_noticia = path
-                        elif nombre_fuente == "RPP":
-                            url_noticia = "https://rpp.pe" + path
-                        elif nombre_fuente == "El Comercio":
-                            url_noticia = "https://elcomercio.pe" + path
-                        elif nombre_fuente == "La República":
-                            url_noticia = "https://larepublica.pe" + path
-                        elif nombre_fuente == "Canal N":
-                            url_noticia = "https://canaln.pe" + path
-                        elif nombre_fuente == "Diario Correo":
-                            url_noticia = "https://diariocorreo.pe" + path
-                        elif nombre_fuente == "Perú 21":
-                            url_noticia = "https://peru21.pe" + path
-                        elif nombre_fuente == "Infobae":
-                            url_noticia = "https://www.infobae.com" + path
-                        else:
-                            url_noticia = path
-
-                        distrito = buscar_palabra_exacta(
-                            titulo_texto, DISTRITOS_INTEGRADOS)
-                        delito = buscar_palabra_exacta(
-                            titulo_texto, PALABRAS_CLAVE)
-
-                        if distrito or delito:
-                            ubicacion = distrito if distrito else "⚠️ No Especificado"
-                            # AQUI GUARDAMOS EL TIPO DE DELITO DETECTADO
-                            categoria = delito if delito else "General/Otro"
-
-                            if not any(n['Enlace'] == url_noticia for n in noticias_encontradas):
-                                noticias_encontradas.append({
-                                    "Titular": f"[{nombre_fuente}] {titulo_texto}",
-                                    "Distrito": ubicacion,
-                                    "Enlace": url_noticia,
-                                    "Fuente": nombre_fuente,
-                                    "Categoría": categoria  # Nueva columna para gráficos
-                                })
-        except Exception:
+            # Procesar datos recibidos
+            if datos:
+                # Si devolvió DataFrame, lo convertimos a lista de dicts
+                if isinstance(datos, pd.DataFrame):
+                    datos = datos.to_dict('records')
+                
+                # Normalización básica por si acaso
+                for noticia in datos:
+                    # Asegurar que tenga columna Fuente
+                    if 'Fuente' not in noticia:
+                        noticia['Fuente'] = nombre_web
+                    
+                    # Asegurar Categoría por defecto si viene vacía
+                    if 'Categoría' not in noticia or not noticia['Categoría']:
+                        noticia['Categoría'] = 'General/Seguridad'
+                        
+                todas_las_noticias.extend(datos)
+                
+        except Exception as e:
+            st.error(f"Error general en el módulo de {nombre_web}: {e}")
             continue
 
-    return pd.DataFrame(noticias_encontradas)
+    progress_bar.empty()
+    
+    # Convertimos a DataFrame final
+    if todas_las_noticias:
+        return pd.DataFrame(todas_las_noticias)
+    else:
+        return pd.DataFrame()
 
-
-st.set_page_config(page_title="Lima Segura: Monitor",
-                   page_icon="🚨", layout="wide")
-
-if 'historial_noticias' not in st.session_state:
-    st.session_state['historial_noticias'] = pd.DataFrame()
-
-# -----------------------------
-# ESTILOS CSS
-# -----------------------------
+# ==============================================================================
+# 4. ESTILOS CSS
+# ==============================================================================
 st.markdown("""
     <style>
     .kpi-card {
@@ -152,50 +150,46 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------
-# MENÚ
-# -----------------------------
+# ==============================================================================
+# 5. MENÚ LATERAL
+# ==============================================================================
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/1083/1083584.png", width=50)
     st.markdown("## 🚨 Lima Segura")
     menu = option_menu(
         menu_title="Navegación",
-        options=["Inicio", "Mapa del Crimen",
-                 "Análisis por Periódico", "Emergencias", "Equipo"],
+        options=["Inicio", "Mapa del Crimen", "Análisis por Periódico", "Emergencias", "Equipo"],
         icons=["house", "geo-alt", "newspaper", "phone", "people"],
         menu_icon="list",
         default_index=0,
         styles={"nav-link-selected": {"background-color": "#D32F2F"}}
     )
 
-# -----------------------------
-# SECCIÓN: INICIO
-# -----------------------------
+# ==============================================================================
+# 6. SECCIÓN: INICIO
+# ==============================================================================
 if menu == "Inicio":
-    st.markdown('<h1 class="main-title">SISTEMA DE ALERTA DE DELITOS</h1>',
-                unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Monitor de Criminalidad basado en Web Scraping</p>',
-                unsafe_allow_html=True)
+    st.markdown('<h1 class="main-title">SISTEMA DE ALERTA DE DELITOS</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Monitor de Criminalidad Multi-Fuente (Modular)</p>', unsafe_allow_html=True)
 
     col_img1, col_img2 = st.columns(2)
     try:
         with col_img1:
             st.image("imagenes/cambio_habitos.jpg", use_container_width=True)
-    except:
-        pass
+    except: pass
     try:
         with col_img2:
             st.image("imagenes/tukituki.png", use_container_width=True)
-    except:
-        pass
+    except: pass
 
     st.markdown("---")
 
     col_scan_center = st.columns([1, 2, 1])
     with col_scan_center[1]:
-        if st.button("🔄 INICIAR ESCANEO DE NOTICIAS (7 FUENTES)", type="primary", use_container_width=True):
-            st.cache_data.clear()
-            st.session_state['historial_noticias'] = escanear_inteligente()
+        # BOTÓN QUE ACTIVA TUS SCRIPTS DE LA CARPETA
+        if st.button("🔄 EJECUTAR SCRIPTS DE LA CARPETA 'webscraping'", type="primary", use_container_width=True):
+            st.cache_data.clear() # Limpia caché para forzar ejecución nueva
+            st.session_state['historial_noticias'] = escanear_con_archivos_propios()
             st.rerun()
 
     df_kpi = st.session_state['historial_noticias']
@@ -203,237 +197,151 @@ if menu == "Inicio":
 
     k1, k2, k3 = st.columns(3)
     with k1:
-        st.markdown(
-            f"""<div class="kpi-card"><h3>🗞️ {noticias_count}</h3><p>Noticias Recolectadas</p></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="kpi-card"><h3>🗞️ {noticias_count}</h3><p>Noticias Recolectadas</p></div>""", unsafe_allow_html=True)
     with k2:
-        st.markdown(
-            f"""<div class="kpi-card"><h3>📡 7 Fuentes</h3><p>RPP, Comercio, República, etc.</p></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="kpi-card"><h3>📡 Modular</h3><p>Leyendo desde carpeta webscraping/</p></div>""", unsafe_allow_html=True)
     with k3:
-        st.markdown(
-            f"""<div class="kpi-card"><h3>📍 Lima</h3><p>Geolocalización Activa</p></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="kpi-card"><h3>📍 Lima</h3><p>Geolocalización Activa</p></div>""", unsafe_allow_html=True)
 
-# -----------------------------
-# SECCIÓN: MAPA
-# -----------------------------
+# ==============================================================================
+# 7. SECCIÓN: MAPA DEL CRIMEN
+# ==============================================================================
 elif menu == "Mapa del Crimen":
     st.title("📍 Mapa de Calor en Tiempo Real")
-
     df_base = st.session_state['historial_noticias']
 
     if df_base.empty:
-        st.warning("⚠️ No hay datos. Ve a 'Inicio' y escanea noticias.")
+        st.warning("⚠️ No hay datos cargados. Ve a 'Inicio' y ejecuta los scripts.")
     else:
-        col_control, col_map = st.columns([1, 4])
+        # Asegurarnos de que las columnas existan
+        if 'Distrito' in df_base.columns:
+            col_control, col_map = st.columns([1, 4])
+            with col_control:
+                st.subheader("Filtros")
+                distrito_sel = st.selectbox("Distrito:", ["Todos"] + list(COORDENADAS_LIMA.keys()))
+                
+                # Manejo de error si no existe columna Categoría
+                cats_dispo = ["Todos"]
+                if 'Categoría' in df_base.columns:
+                    cats_dispo += list(df_base['Categoría'].unique())
+                delito_sel = st.selectbox("Tipo de Delito:", cats_dispo)
 
-        with col_control:
-            st.subheader("Filtros")
-            distrito_sel = st.selectbox(
-                "Distrito:", ["Todos"] + list(COORDENADAS_LIMA.keys()))
-            # Filtro por Categoría de Delito (NUEVO)
-            delitos_disponibles = ["Todos"] + \
-                list(df_base['Categoría'].unique())
-            delito_sel = st.selectbox("Tipo de Delito:", delitos_disponibles)
+            with col_map:
+                df_filtrado = df_base.copy()
+                if distrito_sel != "Todos":
+                    df_filtrado = df_filtrado[df_filtrado['Distrito'] == distrito_sel]
+                if delito_sel != "Todos" and 'Categoría' in df_filtrado.columns:
+                    df_filtrado = df_filtrado[df_filtrado['Categoría'] == delito_sel]
 
-        with col_map:
-            df_filtrado = df_base.copy()
-            if distrito_sel != "Todos":
-                df_filtrado = df_filtrado[df_filtrado['Distrito']
-                                          == distrito_sel]
-            if delito_sel != "Todos":
-                df_filtrado = df_filtrado[df_filtrado['Categoría']
-                                          == delito_sel]
+                # Mapeo de coordenadas
+                df_filtrado['coords'] = df_filtrado['Distrito'].apply(lambda x: COORDENADAS_LIMA.get(str(x).upper(), [None, None]))
+                df_final = df_filtrado.dropna(subset=['coords'])
 
-            df_filtrado['coords'] = df_filtrado['Distrito'].apply(
-                lambda x: COORDENADAS_LIMA.get(x.upper(), [None, None]))
-            df_final = df_filtrado.dropna(subset=['coords'])
+                if not df_final.empty:
+                    df_final['lat'] = df_final['coords'].apply(lambda x: x[0])
+                    df_final['lon'] = df_final['coords'].apply(lambda x: x[1])
 
-            if not df_final.empty:
-                df_final['lat'] = df_final['coords'].apply(lambda x: x[0])
-                df_final['lon'] = df_final['coords'].apply(lambda x: x[1])
+                    lat_c, lon_c = (-12.0464, -77.0428) if distrito_sel == "Todos" else COORDENADAS_LIMA[distrito_sel]
+                    zoom_c = 10 if distrito_sel == "Todos" else 13
 
-                lat_c, lon_c = (-12.0464, -
-                                77.0428) if distrito_sel == "Todos" else COORDENADAS_LIMA[distrito_sel]
-                zoom_c = 10 if distrito_sel == "Todos" else 13
+                    st.pydeck_chart(pdk.Deck(
+                        map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+                        initial_view_state=pdk.ViewState(latitude=lat_c, longitude=lon_c, zoom=zoom_c, pitch=45),
+                        layers=[
+                            pdk.Layer(
+                                "ScatterplotLayer",
+                                df_final,
+                                get_position='[lon, lat]',
+                                get_color='[200, 30, 0, 160]',
+                                get_radius=200,
+                                pickable=True,
+                            ),
+                        ],
+                        tooltip={"text": "{Titular}\n({Fuente})"}
+                    ))
+                else:
+                    st.info("No hay noticias mapeables con los filtros seleccionados.")
+        else:
+            st.error("Los scripts de scraping no devolvieron la columna 'Distrito'. Revisa tus archivos .py.")
 
-                st.pydeck_chart(pdk.Deck(
-                    map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-                    initial_view_state=pdk.ViewState(
-                        latitude=lat_c, longitude=lon_c, zoom=zoom_c, pitch=45),
-                    layers=[
-                        pdk.Layer(
-                            "ScatterplotLayer",
-                            df_final,
-                            get_position='[lon, lat]',
-                            get_color='[200, 30, 0, 160]',
-                            get_radius=200,
-                            pickable=True,
-                        ),
-                    ],
-                    tooltip={"text": "{Titular}\n({Categoría})"}
-                ))
-            else:
-                st.info("No se encontraron noticias con esa ubicación o categoría.")
-
-# -----------------------------
-# SECCIÓN: ANÁLISIS
-# -----------------------------
+# ==============================================================================
+# 8. SECCIÓN: ANÁLISIS POR PERIÓDICO
+# ==============================================================================
 elif menu == "Análisis por Periódico":
     st.title("📊 Análisis Detallado de Criminalidad")
-
     df_analisis = st.session_state['historial_noticias']
 
     if df_analisis.empty:
-        st.warning("⚠️ Primero debes escanear las noticias. Ve a Inicio.")
+        st.warning("⚠️ Sin datos. Ejecuta el escaneo en Inicio.")
     else:
-        # FILTROS DE ANÁLISIS
         st.write("### 🔍 Filtros")
         col_f1, col_f2 = st.columns(2)
         with col_f1:
-            fuentes_sel = st.multiselect("Filtrar por Medio:", df_analisis['Fuente'].unique(
-            ), default=df_analisis['Fuente'].unique())
-        with col_f2:
-            tipos_sel = st.multiselect("Filtrar por Tipo de Delito:", df_analisis['Categoría'].unique(
-            ), default=df_analisis['Categoría'].unique())
-
-        # Aplicar filtros
-        df_viz = df_analisis[df_analisis['Fuente'].isin(
-            fuentes_sel) & df_analisis['Categoría'].isin(tipos_sel)]
+            fuentes_sel = st.multiselect("Medio:", df_analisis['Fuente'].unique(), default=df_analisis['Fuente'].unique())
+        
+        # Validación de columna Categoría
+        if 'Categoría' in df_analisis.columns:
+            with col_f2:
+                tipos_sel = st.multiselect("Delito:", df_analisis['Categoría'].unique(), default=df_analisis['Categoría'].unique())
+            df_viz = df_analisis[df_analisis['Fuente'].isin(fuentes_sel) & df_analisis['Categoría'].isin(tipos_sel)]
+        else:
+            df_viz = df_analisis[df_analisis['Fuente'].isin(fuentes_sel)]
 
         st.write("---")
-
-        # FILA DE GRÁFICOS
         c1, c2 = st.columns(2)
 
         with c1:
             st.subheader("📰 Noticias por Medio")
             conteo = df_viz['Fuente'].value_counts().reset_index()
             conteo.columns = ['Fuente', 'Cantidad']
-            fig1 = px.bar(conteo, x='Fuente', y='Cantidad',
-                          color='Fuente', text='Cantidad')
+            fig1 = px.bar(conteo, x='Fuente', y='Cantidad', color='Fuente', text='Cantidad')
             st.plotly_chart(fig1, use_container_width=True)
 
         with c2:
-            st.subheader("🔫 Distribución por Tipo de Delito")
-            # Gráfico de Pastel (Pie Chart)
-            conteo_tipo = df_viz['Categoría'].value_counts().reset_index()
-            conteo_tipo.columns = ['Categoría', 'Cantidad']
-            fig2 = px.pie(conteo_tipo, names='Categoría',
-                          values='Cantidad', hole=0.4)
-            st.plotly_chart(fig2, use_container_width=True)
+            if 'Categoría' in df_viz.columns:
+                st.subheader("🔫 Distribución por Delito")
+                conteo_tipo = df_viz['Categoría'].value_counts().reset_index()
+                conteo_tipo.columns = ['Categoría', 'Cantidad']
+                fig2 = px.pie(conteo_tipo, names='Categoría', values='Cantidad', hole=0.4)
+                st.plotly_chart(fig2, use_container_width=True)
+            else:
+                st.info("Tus scripts no están devolviendo la columna 'Categoría'.")
 
         st.write("---")
-        st.subheader("📋 Detalle de Noticias Filtradas")
-        st.dataframe(
-            df_viz[['Titular', 'Fuente', 'Categoría', 'Distrito']],
-            hide_index=True,
-            use_container_width=True
-        )
-# -----------------------------
-# EQUIPO
-# -----------------------------
+        st.subheader("📋 Detalle de Noticias")
+        cols_to_show = ['Titular', 'Fuente', 'Enlace']
+        if 'Distrito' in df_viz.columns: cols_to_show.append('Distrito')
+        
+        st.dataframe(df_viz[cols_to_show], hide_index=True, use_container_width=True)
+
+# ==============================================================================
+# 9. SECCIÓN: EQUIPO Y EMERGENCIAS (Mantenemos tu diseño)
+# ==============================================================================
 elif menu == "Equipo":
     st.markdown("""
     <style>
-        .team-container {
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 40px;
-            margin-top: 50px;
-        }
-        .member-card {
-            background-color: #f8f9fa;
-            border-top: 5px solid #D32F2F; /* Rojo Alerta */
-            border-radius: 15px;
-            padding: 30px;
-            width: 250px;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.3s;
-        }
-        .member-card:hover {
-            transform: translateY(-10px);
-        }
-        .member-name {
-            font-size: 18px;
-            font-weight: bold;
-            color: #333;
-            margin-top: 15px;
-        }
-        .member-role {
-            color: #666;
-            font-size: 0.85em;
-            margin-bottom: 15px;
-        }
-        .avatar {
-            font-size: 50px;
-        }
-        .github-btn {
-            text-decoration: none; 
-            color: #D32F2F; 
-            font-weight: bold;
-            border: 1px solid #D32F2F;
-            padding: 5px 15px;
-            border-radius: 20px;
-            transition: all 0.3s ease;
-        }
-        .github-btn:hover {
-            background-color: #D32F2F;
-            color: white;
-        }
+        .team-container { display: flex; justify-content: center; flex-wrap: wrap; gap: 40px; margin-top: 50px; }
+        .member-card { background-color: #f8f9fa; border-top: 5px solid #D32F2F; border-radius: 15px; padding: 30px; width: 250px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: transform 0.3s; }
+        .member-card:hover { transform: translateY(-10px); }
+        .member-name { font-size: 18px; font-weight: bold; color: #333; margin-top: 15px; }
+        .member-role { color: #666; font-size: 0.85em; margin-bottom: 15px; }
+        .avatar { font-size: 50px; }
+        .github-btn { text-decoration: none; color: #D32F2F; font-weight: bold; border: 1px solid #D32F2F; padding: 5px 15px; border-radius: 20px; transition: all 0.3s ease; }
+        .github-btn:hover { background-color: #D32F2F; color: white; }
     </style>
     <h2 style="text-align:center;">👥 El Equipo</h2>
     <p style="text-align:center;">Estudiantes de Ingeniería Estadística e Informática - UNALM</p>
     <div class="team-container">
-    <div class="member-card">
-    <div class="avatar">👨‍💻</div>
-    <div class="member-name">Daniel Ormeño Sakihama</div>
-    <div class="member-role">Ingeniería Estadística Informática</div>
-    <a href="https://github.com/Orsaki" target="_blank" class="github-btn">GitHub Profile</a>
-    </div>
-    <div class="member-card">
-    <div class="avatar">👨‍💻</div>
-    <div class="member-name">Luis Huamayalli</div>
-    <div class="member-role">Ingeniería Estadística Informática</div>
-    <a href="https://github.com/Albert-ca" target="_blank" class="github-btn">GitHub Profile</a>
-    </div>
-    <div class="member-card">
-    <div class="avatar">👩‍💻</div>
-    <div class="member-name">Pamela Lázaro</div>
-    <div class="member-role">Ingeniería Estadística Informática</div>
-    <a href="https://github.com/lazaropamela" target="_blank" class="github-btn">GitHub Profile</a>
-    </div>
-    <div class="member-card">
-    <div class="avatar">👩‍💻</div>
-    <div class="member-name">Fátima Montes</div>
-    <div class="member-role">Ingeniería Estadística Informática</div>
-    <a href="https://github.com/FatimaMY" target="_blank" class="github-btn">GitHub Profile</a>
-    </div>
+    <div class="member-card"><div class="avatar">👨‍💻</div><div class="member-name">Daniel Ormeño Sakihama</div><div class="member-role">Ingeniería Estadística Informática</div><a href="https://github.com/Orsaki" target="_blank" class="github-btn">GitHub Profile</a></div>
+    <div class="member-card"><div class="avatar">👨‍💻</div><div class="member-name">Luis Huamayalli</div><div class="member-role">Ingeniería Estadística Informática</div><a href="https://github.com/Albert-ca" target="_blank" class="github-btn">GitHub Profile</a></div>
+    <div class="member-card"><div class="avatar">👩‍💻</div><div class="member-name">Pamela Lázaro</div><div class="member-role">Ingeniería Estadística Informática</div><a href="https://github.com/lazaropamela" target="_blank" class="github-btn">GitHub Profile</a></div>
+    <div class="member-card"><div class="avatar">👩‍💻</div><div class="member-name">Fátima Montes</div><div class="member-role">Ingeniería Estadística Informática</div><a href="https://github.com/FatimaMY" target="_blank" class="github-btn">GitHub Profile</a></div>
     </div>
     """, unsafe_allow_html=True)
-    # --- AGREGA ESTE BLOQUE AL FINAL (Commit 14) ---
 
-# --- BUSCA ESTA LÍNEA Y ASEGÚRATE QUE TENGA LA "S" AL FINAL ---
 elif menu == "Emergencias":
-    st.title("📞 Centrales de Emergencia y Ayuda")
-    st.markdown(
-        "Contactos directos para asistencia inmediata en Lima Metropolitana y Callao.")
-    st.write("---")
-
+    st.title("📞 Centrales de Emergencia")
     col1, col2, col3 = st.columns(3)
-    with col1:
-        st.error("### 👮 PNP")
-        st.subheader("105")
-        st.write("Policía Nacional del Perú.")
-    with col2:
-        st.warning("### 🚒 Bomberos")
-        st.subheader("116")
-        st.write("Incendios y rescates.")
-    with col3:
-        st.info("### 🚑 SAMU")
-        st.subheader("106")
-        st.write("Urgencias médicas.")
-
-    st.write("---")
-    with st.expander("📌 Otros números importantes"):
-        st.write("* **Serenazgo de Lima:** (01) 318-5050")
+    with col1: st.error("### 👮 PNP 105"); st.write("Policía Nacional.")
+    with col2: st.warning("### 🚒 Bomberos 116"); st.write("Incendios y rescates.")
+    with col3: st.info("### 🚑 SAMU 106"); st.write("Urgencias médicas.")
