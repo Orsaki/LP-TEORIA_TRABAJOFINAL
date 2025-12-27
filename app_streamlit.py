@@ -388,6 +388,14 @@ elif menu == "Análisis por Periódico":
             # Esta función ya debe incluir la lógica para los 3 periódicos que vimos antes
             st.session_state['historial_noticias'] = escanear_inteligente()
             st.rerun()
+        # Botón de Descarga ---
+        csv = df_final.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Descargar Reporte en CSV",
+            data=csv,
+            file_name=f'reporte_inseguridad_{fecha_hoy}.csv',
+            mime='text/csv',
+        )
 
     # --- 2. CONSTANTES Y FUNCIONES (Las definimos primero) ---
     URL_BASE = "https://rpp.pe/tema/inseguridad-ciudadana"
