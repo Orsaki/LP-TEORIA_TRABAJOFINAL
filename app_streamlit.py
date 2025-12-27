@@ -334,7 +334,7 @@ elif menu == "Análisis por Periódico":
         col_title, col_metrics = st.columns([2, 1])
         
         with col_title:
-            st.subheader("📰 Noticias Actuales")
+            st.subheader("📰 Noticias Actuales de RPP, Comercio y la República")
         
         with col_metrics:
             fecha_hoy = datetime.now().strftime("%d/%m/%Y")
