@@ -1,44 +1,90 @@
 import requests
 from bs4 import BeautifulSoup
-import csv
-from config import HEADERS, PALABRAS_CLAVE
-# URLs de Canal N a scrapear
+import re
+import sys
+import os
+
+# --- CONEXIÓN CON CONFIG.PY ---
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from config import HEADERS, PALABRAS_CLAVE, DISTRITOS_INTEGRADOS
+
 URLS = [
     "https://canaln.pe/noticias/policiales",
     "https://canaln.pe/noticias/policia",
-    "https://canaln.pe/noticias/inseguridad-ciudadana"]
-NOMBRE_ARCHIVO = "noticias_canaln_filtradas.csv"
+    "https://canaln.pe/noticias/inseguridad-ciudadana"
+]
 
+# ======================================================================
+# FUNCIÓN AUXILIAR
+# ======================================================================
 
-def extraer_noticias_canaln():
-    with open(NOMBRE_ARCHIVO, "w", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-        writer.writerow(["Titulo", "Link", "Fuente"])
+def buscar_palabra_exacta(texto, lista):
+    texto = texto.lower()
+    for palabra in lista:
+        patron = r'\b' + re.escape(palabra) + r'\b'
+        if re.search(patron, texto):
+            return palabra.upper()
+    return None
 
-        for url in URLS:
-            print(f"📡 Accediendo a: {url}")
-            response = requests.get(url, headers=HEADERS)
+# ======================================================================
+# FUNCIÓN PRINCIPAL (CONTRATO STREAMLIT)
+# ======================================================================
+
+def obtener_noticias():
+    noticias = []
+    enlaces_vistos = set()
+
+    print("📡 Escaneando Canal N...")
+
+    try:
+        for url_base in URLS:
+            response = requests.get(url_base, headers=HEADERS, timeout=10)
+
             if response.status_code != 200:
-                print(f"❌ Error al conectar con {url}")
+                print(f"❌ Error HTTP {response.status_code} en {url_base}")
                 continue
 
             soup = BeautifulSoup(response.content, "html.parser")
-            resultados = soup.find_all("a", href=True)
+            titulares = soup.find_all(["h2", "h3"])
 
-            for a in resultados:
+            for h in titulares:
+                a = h.find("a")
+                if not a:
+                    continue
+
                 titulo = a.text.strip()
-                link = a.get("href")
+                enlace = a.get("href")
 
-                # Asegurar que el enlace esté completo
-                if link and not link.startswith("http"):
-                    link = "https://canaln.pe" + link
+                if not titulo or len(titulo) < 15:
+                    continue
 
-                if any(p in titulo.lower() for p in PALABRAS_CLAVE):
-                    writer.writerow([titulo, link, "Canal N"])
-                    print(f"   ➤ Guardado: {titulo[:60]}")
+                if enlace and not enlace.startswith("http"):
+                    enlace = "https://canaln.pe" + enlace
 
-    print("📌 Scraping Canal N finalizado.")
+                if enlace in enlaces_vistos:
+                    continue
 
+                delito = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
+                distrito = buscar_palabra_exacta(titulo, DISTRITOS_INTEGRADOS)
 
+                if delito:
+                    noticias.append({
+                        "Titular": titulo,
+                        "Enlace": enlace,
+                        "Fuente": "Canal N",
+                        "Distrito": distrito if distrito else "⚠️ No Especificado",
+                        "Categoría": delito
+                    })
+                    enlaces_vistos.add(enlace)
+
+    except Exception as e:
+        print(f"❌ Error en Canal N: {e}")
+
+    return noticias
+
+# ======================================================================
+# PRUEBA LOCAL
+# ======================================================================
 if __name__ == "__main__":
-    extraer_noticias_canaln()
+    datos = obtener_noticias()
+    print(f"Resumen: {len(datos)} noticias detectadas.")
