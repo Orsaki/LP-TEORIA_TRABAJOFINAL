@@ -4,42 +4,47 @@ import re
 import sys
 import os
 
-# conexión config
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import HEADERS, PALABRAS_CLAVE, DISTRITOS_INTEGRADOS
 
-URL_WEB = "https://larepublica.pe/sociedad"
+URL_WEB = "https://www.infobae.com/peru/"
+
 
 def buscar_palabra_exacta(texto, lista):
     texto = texto.lower()
     for palabra in lista:
-        if re.search(r'\b' + re.escape(palabra) + r'\b', texto):
+        patron = r'\b' + re.escape(palabra) + r'\b'
+        if re.search(patron, texto):
             return palabra.upper()
     return None
 
+
 def obtener_noticias():
     noticias = []
-    print("📡 Escaneando La República...")
+    print("📡 Escaneando Infobae Perú...")
 
     try:
         response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
+
         if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            elementos = soup.find_all(['h2', 'h3'])
+            soup = BeautifulSoup(response.content, "html.parser")
+            bloques = soup.find_all(["article", "div"])
 
-            for item in elementos:
-                a = item.find('a')
-                if not a:
+            for b in bloques:
+                h = b.find(["h2", "h3"])
+                a = b.find("a")
+
+                if not h or not a:
                     continue
 
-                titulo = a.text.strip()
-                link = a.get('href')
+                titulo = h.get_text(strip=True)
+                url = a.get("href")
 
-                if not link or len(titulo) < 15:
+                if not titulo or len(titulo) < 15 or not url:
                     continue
 
-                if not link.startswith("http"):
-                    link = "https://larepublica.pe" + link
+                if not url.startswith("http"):
+                    url = "https://www.infobae.com" + url
 
                 delito = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
                 distrito = buscar_palabra_exacta(titulo, DISTRITOS_INTEGRADOS)
@@ -47,13 +52,14 @@ def obtener_noticias():
                 if delito:
                     noticias.append({
                         "Titular": titulo,
-                        "Enlace": link,
-                        "Fuente": "La República",
+                        "Enlace": url,
+                        "Fuente": "Infobae Perú",
                         "Distrito": distrito if distrito else "⚠️ No Especificado",
                         "Categoría": delito
                     })
 
     except Exception as e:
-        print("❌ Error La República:", e)
+        print(f"❌ Error en Infobae: {e}")
 
+    print(f"✅ Infobae: {len(noticias)} noticias detectadas")
     return noticias
