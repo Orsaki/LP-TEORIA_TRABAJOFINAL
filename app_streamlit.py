@@ -28,11 +28,6 @@ COORDENADAS_LIMA = {
     "CALLAO": [-12.0566, -77.1181], "VENTANILLA": [-11.8753, -77.1256], "LA PERLA": [-12.0675, -77.1025]
 }
 
-st.set_page_config(
-    page_title="Lima Segura: Monitor de Criminalidad", 
-    page_icon="🚨", 
-    layout="wide"
-)
 # --- 2. HERRAMIENTAS DE BÚSQUEDA (Mover aquí arriba) ---
 # --- NUEVAS FUENTES DE NOTICIAS ---
 FUENTES = {
@@ -102,6 +97,11 @@ def escanear_inteligente():
             
     return pd.DataFrame(noticias_encontradas)
 
+st.set_page_config(
+    page_title="Lima Segura: Monitor de Criminalidad", 
+    page_icon="🚨", 
+    layout="wide"
+)
 # --- 3. MEMORIA COMPARTIDA (Session State) ---
 if 'historial_noticias' not in st.session_state:
     # La primera vez que carga, busca noticias automáticamente
