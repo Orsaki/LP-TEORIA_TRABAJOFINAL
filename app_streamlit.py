@@ -283,7 +283,15 @@ elif menu == "Mapa del Crimen":
             def get_lat_lon(dist):
                 name = dist.replace("⚠️ ", "").strip().upper()
                 return COORDENADAS_LIMA.get(name, [None, None])
+            def asignar_color(titular):
+                criticos = ["MUERTE", "ASESINATO", "SICARIO", "HOMICIDIO", "BALEAN"]
+                if any(palabra in titular.upper() for palabra in criticos):
+                    return [255, 0, 0, 200] # Rojo puro para casos graves
+                return [255, 165, 0, 200]    # Naranja para otros delitos
 
+            df_mapa['color'] = df_mapa['Titular'].apply(asignar_color)
+            
+            
             df_mapa['coords'] = df_mapa['Distrito'].apply(get_lat_lon)
             df_mapa['lat'] = df_mapa['coords'].apply(lambda x: x[0])
             df_mapa['lon'] = df_mapa['coords'].apply(lambda x: x[1])
@@ -388,7 +396,7 @@ elif menu == "Análisis por Periódico":
             # Esta función ya debe incluir la lógica para los 3 periódicos que vimos antes
             st.session_state['historial_noticias'] = escanear_inteligente()
             st.rerun()
-        # Botón de Descarga ---
+        # B otón de Descarga --  -
         csv = df_final.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Descargar Reporte en CSV",
