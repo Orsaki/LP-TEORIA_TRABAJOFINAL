@@ -1,19 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
 import csv
+from config import HEADERS, PALABRAS_CLAVE
 
 URL_WEB = "https://diariocorreo.pe/peru/"
 NOMBRE_ARCHIVO = "noticias_diariocorreo_filtradas.csv"
 
-PALABRAS_CLAVE = [
-    "robo", "asalto", "crimen", "delincuencia",
-    "policía", "sicario", "balacera",
-    "asesinato", "extorsión", "captura"
-]
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
 
 def extraer_noticias_correo():
     print("📡 Navegando en Diario Correo...")
@@ -47,6 +39,7 @@ def extraer_noticias_correo():
         print(f"✅ {contador} noticias guardadas")
     else:
         print("❌ Error al acceder a Diario Correo")
+
 
 if __name__ == "__main__":
     extraer_noticias_correo()

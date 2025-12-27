@@ -1,19 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
 import csv
-
+from config import HEADERS, PALABRAS_CLAVE
 URL_WEB = "https://peru21.pe/lima/"
 NOMBRE_ARCHIVO = "noticias_peru21_filtradas.csv"
 
-PALABRAS_CLAVE = [
-    "robo", "asalto", "delincuencia", "crimen",
-    "policía", "sicario", "balacera",
-    "asesinato", "muerte", "extorsión", "captura"
-]
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
 
 def extraer_noticias_peru21():
     print("📡 Navegando en Perú21...")

@@ -1,22 +1,14 @@
 import requests
 from bs4 import BeautifulSoup
 import csv
-
+from config import HEADERS, PALABRAS_CLAVE
 # URLs de Canal N a scrapear
 URLS = [
     "https://canaln.pe/noticias/policiales",
     "https://canaln.pe/noticias/policia",
-    "https://canaln.pe/noticias/inseguridad-ciudadana"
-]
+    "https://canaln.pe/noticias/inseguridad-ciudadana"]
 NOMBRE_ARCHIVO = "noticias_canaln_filtradas.csv"
-PALABRAS_CLAVE = [
-    "robo", "asalto", "crimen", "delincuencia",
-    "policía", "sicario", "balacera", "asesinato",
-    "captura", "extorsión"
-]
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+
 
 def extraer_noticias_canaln():
     with open(NOMBRE_ARCHIVO, "w", newline="", encoding="utf-8") as file:
@@ -46,6 +38,7 @@ def extraer_noticias_canaln():
                     print(f"   ➤ Guardado: {titulo[:60]}")
 
     print("📌 Scraping Canal N finalizado.")
+
 
 if __name__ == "__main__":
     extraer_noticias_canaln()

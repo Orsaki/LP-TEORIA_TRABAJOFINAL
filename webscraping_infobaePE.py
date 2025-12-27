@@ -1,19 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
 import csv
-
+from config import HEADERS, PALABRAS_CLAVE
 URL_WEB = "https://www.infobae.com/peru/"
 NOMBRE_ARCHIVO = "noticias_infobae_filtradas.csv"
 
-PALABRAS_CLAVE = [
-    "robo", "asalalto", "crimen", "delincuencia",
-    "policía", "sicario", "balacera",
-    "asesinato", "muerte", "extorsión"
-]
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
 
 def extraer_noticias_infobae():
     print("📡 Navegando en Infobae Perú...")
@@ -46,6 +37,7 @@ def extraer_noticias_infobae():
         print(f"✅ {contador} noticias guardadas")
     else:
         print("❌ Error al acceder a Infobae")
+
 
 if __name__ == "__main__":
     extraer_noticias_infobae()
