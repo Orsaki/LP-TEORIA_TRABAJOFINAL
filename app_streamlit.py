@@ -77,7 +77,7 @@ def cargar_datos():
 df_global = cargar_datos()
 
 # -----------------------------
-# 3. ESTILOS CSS (DE TU COMPAÑERO)
+# 3. ESTILOS CSS
 # -----------------------------
 st.markdown("""
     <style>
@@ -246,7 +246,6 @@ elif menu == "Emergencias":
 # SECCIÓN: EQUIPO
 # -----------------------------
 elif menu == "Equipo":
-    # Mismo código de tu compañero para el equipo
     st.markdown("""
     <h2 style="text-align:center;">👥 El Equipo</h2>
     <div style="display:flex; justify-content:center; gap:20px; flex-wrap:wrap;">
