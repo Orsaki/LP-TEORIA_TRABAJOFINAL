@@ -99,6 +99,7 @@ if "next" in st.session_state:
 
 
 
+
 # -----------------------------
 # ESTILOS CSS PERSONALIZADOS
 # -----------------------------
@@ -492,3 +493,4 @@ elif menu == "Equipo":
     </div>
 
     """, unsafe_allow_html=True)
+
