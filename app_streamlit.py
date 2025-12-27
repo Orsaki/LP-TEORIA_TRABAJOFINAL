@@ -261,6 +261,7 @@ elif menu == "Mapa del Crimen":
     with col_control:
         st.subheader("Filtros")
         distrito_sel = st.selectbox("Seleccionar Distrito", ["Todos"] + list(COORDENADAS_LIMA.keys()))
+        busqueda = st.text_input("🔍 Buscar en titulares:", placeholder="Ej: celular, arma, robo")
         
         # Filtro de Gravedad
         gravedad_sel = st.radio("Gravedad:", ["Todos", "Solo Críticos", "Otros"])
