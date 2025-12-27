@@ -3,413 +3,264 @@ from streamlit_option_menu import option_menu
 import pandas as pd
 import pydeck as pdk
 import plotly.express as px
-import requests
-from bs4 import BeautifulSoup
-
+import os
+import numpy as np
 
 # -----------------------------
-# CONFIGURACIÓN DE LA PÁGINA
+# 1. BASE DE DATOS DE COORDENADAS
+# -----------------------------
+COORDENADAS_LIMA = {
+    "ANCON": [-11.7731, -77.1758], "ATE": [-12.0253, -76.9204], "BARRANCO": [-12.1481, -77.0211],
+    "BREÑA": [-12.0601, -77.0450], "CARABAYLLO": [-11.8481, -77.0286], "CHACLACAYO": [-11.9723, -76.7694],
+    "CHORRILLOS": [-12.1750, -77.0175], "CIENEGUILLA": [-12.0911, -76.7725], "COMAS": [-11.9333, -77.0433],
+    "EL AGUSTINO": [-12.0461, -77.0031], "INDEPENDENCIA": [-11.9925, -77.0494], "JESUS MARIA": [-12.0753, -77.0450],
+    "LA MOLINA": [-12.0725, -76.9419], "LA VICTORIA": [-12.0651, -77.0309], "LINCE": [-12.0847, -77.0347],
+    "LOS OLIVOS": [-11.9922, -77.0709], "LURIGANCHO": [-11.9442, -76.8406], "CHOSICA": [-11.9442, -76.8406],
+    "LURIN": [-12.2742, -76.8669], "MAGDALENA": [-12.0914, -77.0694], "MIRAFLORES": [-12.1211, -77.0297],
+    "PUEBLO LIBRE": [-12.0736, -77.0625], "PUENTE PIEDRA": [-11.8661, -77.0764], "RIMAC": [-12.0294, -77.0286],
+    "SAN BORJA": [-12.1064, -76.9933], "SAN ISIDRO": [-12.0950, -77.0347], "SAN JUAN DE LURIGANCHO": [-11.9764, -77.0002],
+    "SJL": [-11.9764, -77.0002], "SAN JUAN DE MIRAFLORES": [-12.1497, -76.9669], "SJM": [-12.1497, -76.9669],
+    "SAN LUIS": [-12.0750, -76.9958], "SAN MARTIN DE PORRES": [-12.0053, -77.0583], "SMP": [-12.0053, -77.0583],
+    "SAN MIGUEL": [-12.0775, -77.0917], "SANTA ANITA": [-12.0439, -76.9686], "SURCO": [-12.1456, -76.9789],
+    "SANTIAGO DE SURCO": [-12.1456, -76.9789], "SURQUILLO": [-12.1133, -77.0225], "VILLA EL SALVADOR": [-12.2133, -76.9367],
+    "VES": [-12.2133, -76.9367], "VILLA MARIA DEL TRIUNFO": [-12.1603, -76.9294], "VMT": [-12.1603, -76.9294],
+    "CERCADO DE LIMA": [-12.0464, -77.0428], "LIMA": [-12.0464, -77.0428], "CALLAO": [-12.0566, -77.1181],
+    "VENTANILLA": [-11.8753, -77.1256], "LA PERLA": [-12.0675, -77.1025]
+}
+
+# -----------------------------
+# 2. CONFIGURACIÓN E IMPORTACIÓN DE DATOS
 # -----------------------------
 st.set_page_config(
-    page_title="Lima Segura: Monitor de Criminalidad", 
-    page_icon="🚨", 
+    page_title="Lima Segura: Monitor de Criminalidad",
+    page_icon="🚨",
     layout="wide"
 )
 
+# Función para cargar y procesar datos desde TU CSV
 
+
+@st.cache_data
+def cargar_datos():
+    archivo = "dataset_unificado.csv"
+    if not os.path.exists(archivo):
+        return None
+
+    try:
+        df = pd.read_csv(archivo)
+
+        # --- PROCESAMIENTO DE COORDENADAS ---
+        # Función interna para buscar distrito en el título
+        def detectar_distrito_y_coords(titulo):
+            titulo_upper = titulo.upper()
+            for distrito, coords in COORDENADAS_LIMA.items():
+                # Buscamos el nombre del distrito como palabra completa
+                if f" {distrito} " in f" {titulo_upper} " or titulo_upper.startswith(distrito + " ") or titulo_upper.endswith(" " + distrito):
+                    # Añadimos un pequeño "ruido" aleatorio para que los puntos no caigan uno encima de otro exacto
+                    lat_noise = coords[0] + np.random.uniform(-0.002, 0.002)
+                    lon_noise = coords[1] + np.random.uniform(-0.002, 0.002)
+                    return distrito, lat_noise, lon_noise
+            return "No Identificado", None, None
+
+        # Aplicamos la detección
+        df[['Distrito_Detectado', 'lat', 'lon']] = df['Titulo'].apply(
+            lambda x: pd.Series(detectar_distrito_y_coords(x))
+        )
+
+        return df
+    except Exception as e:
+        st.error(f"Error procesando datos: {e}")
+        return None
+
+
+# Cargamos el dataframe global
+df_global = cargar_datos()
 
 # -----------------------------
-# ESTILOS CSS PERSONALIZADOS
+# 3. ESTILOS CSS (DE TU COMPAÑERO)
 # -----------------------------
 st.markdown("""
-<style>
-.kpi-card {
-    background-color: #FFFFFF;
-    border-left: 5px solid #D32F2F;
-    padding: 20px;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
-}
-.kpi-card h3 {
-    color: #D32F2F;
-    font-size: 1.2em;
-}
-.kpi-card p {
-    color: #333;
-    font-size: 0.95em;
-}
-</style>
+    <style>
+    .kpi-card {
+        background-color: #FFFFFF;
+        border-left: 5px solid #D32F2F;
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .kpi-card h3 { color: #D32F2F; font-size: 1.2em; margin-bottom: 10px; }
+    .kpi-card p { color: #333; font-size: 0.95em; }
+    .main-title { font-family: 'Arial Black', sans-serif; color: #1a1a1a; text-align: center; font-size: 3em; margin-bottom: 0; }
+    .subtitle { text-align: center; color: #555; font-size: 1.2em; margin-top: -10px; margin-bottom: 40px; }
+    </style>
 """, unsafe_allow_html=True)
 
 # -----------------------------
-# MENÚ LATERAL
+# 4. MENÚ LATERAL
 # -----------------------------
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/1083/1083584.png", width=50) # Icono genérico de alerta
+    st.image("https://cdn-icons-png.flaticon.com/512/1083/1083584.png", width=50)
     st.markdown("## 🚨 Lima Segura")
     menu = option_menu(
         menu_title="Navegación",
-        options=[
-            "Inicio", 
-            "Mapa del Crimen", 
-            "Análisis por Periódico", 
-            "Equipo"
-        ],
-        icons=["house", "geo-alt", "newspaper", "people"],
+        options=["Inicio", "Mapa del Crimen",
+                 "Análisis por Periódico", "Emergencias", "Equipo"],
+        icons=["house", "geo-alt", "newspaper", "phone", "people"],
         menu_icon="list",
         default_index=0,
-        styles={
-            "nav-link-selected": {"background-color": "#D32F2F"}, # Rojo al seleccionar
-        }
+        styles={"nav-link-selected": {"background-color": "#D32F2F"}}
     )
 
 # -----------------------------
-# SECCIÓN 1: INICIO (Contexto Teórico)
+# SECCIÓN: INICIO
 # -----------------------------
 if menu == "Inicio":
-    # 1. Título Actualizado
-    st.markdown('<h1 class="main-title">SISTEMA DE ALERTA DE DELITOS Y ZONAS PELIGROSAS</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Monitor de Criminalidad basado en Web Scraping y Geolocalización</p>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-title">SISTEMA DE ALERTA DE DELITOS</h1>',
+                unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Monitor de Criminalidad basado en Web Scraping y Geolocalización</p>',
+                unsafe_allow_html=True)
 
-    # 2. Imágenes Locales (desde la carpeta 'imagenes')
-    # Usamos columnas para que se vean una al lado de la otra
-    col_img1, col_img2 = st.columns(2)
-    
-    with col_img1:
-        # Asegúrate de que el nombre coincida exactamente con tu carpeta
-        st.image("imagenes/cambio_habitos.jpg", use_container_width=True, caption="Impacto en la ciudadanía")
-        
-    with col_img2:
-        st.image("imagenes/tukituki.png", use_container_width=True, caption="Análisis de seguridad")
-
-    st.markdown("---")
-    
-    # 3. Resto del contenido (Texto informativo)
     col1, col2 = st.columns(2)
-    
     with col1:
         st.markdown("### 📢 La Realidad Actual")
-        st.write("""
-        La inseguridad ciudadana en Lima Metropolitana se ha convertido en uno de los principales problemas que aquejan a la población. 
-        Diariamente, los medios de comunicación reportan incidentes que van desde hurtos menores hasta crímenes organizados.
-        
-        Este proyecto busca utilizar la tecnología para **centralizar, geolocalizar y visualizar** estas noticias en tiempo real, 
-        permitiendo identificar "puntos calientes" y patrones delictivos basados en la información periodística.
-        """)
-    
+        st.write("La inseguridad ciudadana en Lima Metropolitana es un problema crítico. Este proyecto centraliza noticias de múltiples fuentes para identificar puntos calientes.")
     with col2:
-        st.markdown("### 🤖 ¿Cómo funciona este sistema?")
-        st.info("""
-        1. **Web Scraping:** Un algoritmo recorre periódicos digitales (El Comercio, La República, etc.).
-        2. **Procesamiento NLP:** Se analiza el texto para detectar ubicaciones (Distritos, Calles).
-        3. **Geocoding:** Convertimos las direcciones en coordenadas (Latitud/Longitud).
-        4. **Visualización:** Mostramos los incidentes en un mapa interactivo.
-        """)
+        st.markdown("### 🤖 Tecnología")
+        st.info("Utilizamos Python para extraer noticias, NLP para detectar lugares y Streamlit para visualizar mapas de calor.")
 
-    # 4. KPIs (Indicadores)
-    st.markdown("### 📊 Indicadores Clave (Demo)")
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    
-    with kpi1:
-        st.markdown("""
-        <div class="kpi-card">
-            <h3>🗞️ Fuentes</h3>
-            <p>Monitoreo activo de <b>3 periódicos</b> principales del país.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-    with kpi2:
-        st.markdown("""
-        <div class="kpi-card">
-            <h3>📍 Geolocalización</h3>
-            <p>Detección automática de distritos mediante <b>NLP</b>.</p>
-        </div>
-        """, unsafe_allow_html=True)
+    # KPIs Dinámicos
+    st.markdown("---")
+    k1, k2, k3 = st.columns(3)
 
-    with kpi3:
-        st.markdown("""
-        <div class="kpi-card">
-            <h3>🔥 Mapa de Calor</h3>
-            <p>Identificación visual de zonas con alta densidad de noticias.</p>
-        </div>
-        """, unsafe_allow_html=True)
+    cantidad_noticias = len(df_global) if df_global is not None else 0
+    fuente_top = df_global['Fuente'].mode(
+    )[0] if df_global is not None and not df_global.empty else "N/A"
 
-    with kpi4:
-        st.markdown("""
-        <div class="kpi-card">
-            <h3>⏱️ Tiempo Real</h3>
-            <p>Actualización de noticias al instante (Simulación).</p>
-        </div>
-        """, unsafe_allow_html=True)
+    with k1:
+        st.markdown(
+            f"""<div class="kpi-card"><h3>🗞️ {cantidad_noticias}</h3><p>Noticias Procesadas</p></div>""", unsafe_allow_html=True)
+    with k2:
+        st.markdown(
+            f"""<div class="kpi-card"><h3>🏆 {fuente_top}</h3><p>Fuente Principal</p></div>""", unsafe_allow_html=True)
+    with k3:
+        st.markdown(
+            """<div class="kpi-card"><h3>📍 Lima</h3><p>Cobertura Geográfica</p></div>""", unsafe_allow_html=True)
 
 # -----------------------------
-# SECCIÓN 2: MAPA (Placeholder Pydeck)
+# SECCIÓN: MAPA DEL CRIMEN
 # -----------------------------
 elif menu == "Mapa del Crimen":
-    st.title("📍 Mapa de Incidencias en Lima")
-    st.write("Visualización geoespacial de las noticias extraídas. Los puntos brillantes indican noticias recientes.")
+    st.title("📍 Mapa de Calor de Incidentes")
 
-    col_control, col_map = st.columns([1, 4])
+    if df_global is None:
+        st.error("⚠️ Ejecuta main.py primero para generar los datos.")
+    else:
+        # Filtramos solo las que tienen coordenadas válidas
+        df_mapa = df_global.dropna(subset=['lat', 'lon'])
 
-    with col_control:
-        st.subheader("Filtros")
-        st.selectbox("Seleccionar Distrito", ["Todos", "San Juan de Lurigancho", "Miraflores", "Los Olivos", "Cercado"])
-        st.selectbox("Tipo de Delito", ["Todos", "Robo", "Asalto", "Homicidio", "Extorsión"])
-        st.slider("Rango de tiempo (días)", 1, 30, 7)
-        if st.button("Actualizar Mapa"):
-            st.toast("Actualizando datos desde la web...", icon="🔄")
+        col_filtro, col_mapa = st.columns([1, 3])
 
-    with col_map:
-        # --- CONFIGURACIÓN DEL MAPA VACÍO (POR AHORA) ---
-        # Coordenadas centrales de Lima
-        INITIAL_VIEW_STATE = pdk.ViewState(
-            latitude=-12.0464,
-            longitude=-77.0428,
-            zoom=11,
-            pitch=50,
-        )
+        with col_filtro:
+            st.subheader("Filtros")
+            fuentes = st.multiselect(
+                "Fuente:", df_mapa['Fuente'].unique(), default=df_mapa['Fuente'].unique())
+            df_view = df_mapa[df_mapa['Fuente'].isin(fuentes)]
 
-        # Aquí más adelante insertaremos tu DataFrame con lat/lon
-        # Por ahora creamos un mapa base estilo "Dark" (mejor para ver luces)
-        r = pdk.Deck(
-            map_style='mapbox://styles/mapbox/dark-v10', # Estilo oscuro
-            initial_view_state=INITIAL_VIEW_STATE,
-            tooltip={"text": "Lima"},
-            layers=[] # Aquí irán tus capas de ScatterplotLayer más adelante
-        )
-        
-        st.pydeck_chart(r)
-        
-    st.info("Nota: Este mapa se poblará dinámicamente cuando conectemos el módulo de Web Scraping.")
+            st.metric("Incidentes localizados", len(df_view))
+
+            # Mostrar lista de distritos afectados
+            st.write("Distritos con más casos:")
+            st.dataframe(df_view['Distrito_Detectado'].value_counts().head(5))
+
+        with col_mapa:
+            view_state = pdk.ViewState(
+                latitude=-12.0464, longitude=-77.0428, zoom=10, pitch=45)
+
+            layer_hex = pdk.Layer(
+                "HexagonLayer",
+                data=df_view,
+                get_position='[lon, lat]',
+                radius=300,
+                elevation_scale=4,
+                elevation_range=[0, 1000],
+                pickable=True,
+                extruded=True,
+            )
+
+            layer_scatter = pdk.Layer(
+                "ScatterplotLayer",
+                data=df_view,
+                get_position='[lon, lat]',
+                get_color='[200, 30, 0, 160]',
+                get_radius=150,
+                pickable=True,
+            )
+
+            st.pydeck_chart(pdk.Deck(
+                map_style='mapbox://styles/mapbox/light-v9',
+                initial_view_state=view_state,
+                layers=[layer_hex, layer_scatter],
+                tooltip={"text": "{Titulo}\n({Fuente})"}
+            ))
 
 # -----------------------------
-# SECCIÓN 3: ANÁLISIS POR PERIÓDICO (LÓGICA CORREGIDA)
+# SECCIÓN: ANÁLISIS POR PERIÓDICO
 # -----------------------------
 elif menu == "Análisis por Periódico":
-    from datetime import datetime 
-    import time
-    import re 
-    
-    # --- 1. MEMORIA (SESSION STATE) ---
-    if 'historial_noticias' not in st.session_state:
-        st.session_state['historial_noticias'] = pd.DataFrame(columns=["Titular", "Distrito", "Enlace"])
+    st.title("📊 Análisis Comparativo")
 
-    # --- 2. CONSTANTES Y FUNCIONES (Las definimos primero) ---
-    URL_BASE = "https://rpp.pe/tema/inseguridad-ciudadana"
-    HEADERS = {'User-Agent': 'Mozilla/5.0'}
+    if df_global is not None:
+        c1, c2 = st.columns([2, 1])
 
-    PALABRAS_CLAVE = [
-        "robo", "asalto", "delincuencia", "policia", "policía", "crimen", "sicario", 
-        "balacera", "muerte", "asesinato", "comisaria", "comisaría", "extorsion", "extorsión", "terna", 
-        "captura", "banda", "droga", "operativo", "homicidio", "armas", 
-        "victima", "víctima", "delincuente", "ladrones", "atraco", "disparos", "cadáver", "cuerpo", "matan", "balean"
-    ]
+        with c1:
+            # Gráfico de barras por Fuente
+            conteo = df_global['Fuente'].value_counts().reset_index()
+            conteo.columns = ['Fuente', 'Cantidad']
+            fig = px.bar(conteo, x='Fuente', y='Cantidad',
+                         color='Fuente', title="Noticias por Medio")
+            st.plotly_chart(fig, use_container_width=True)
 
-    EXCLUSIONES_TITULO = [
-        "congreso", "parlamento", "dina", "boluarte", "rusia", "ucrania", "gaza", 
-        "israel", "biden", "trump", "putin", "futbol", "fútbol", "liga 1", 
-        "seleccion", "selección", "fossati", "alianza", "universitario", "jne", "onpe"
-    ]
+        with c2:
+            st.subheader("Buscar Noticia")
+            txt = st.text_input("Palabra clave (ej: robo)")
+            if txt:
+                res = df_global[df_global['Titulo'].str.contains(
+                    txt, case=False, na=False)]
+                st.dataframe(res[['Titulo', 'Fuente']], hide_index=True)
 
-    EXCLUSIONES_URL = [
-        "/mundo/", "/famosos/", "/entretenimiento/", "/cultura/", "/tecnologia/", 
-        "/ciencia/", "/economia/", "/vital/", "/automovilismo/"
-    ]
-
-    DISTRITOS_INTEGRADOS = [
-        "ancon", "ancón", "carabayllo", "comas", "independencia", "los olivos", "puente piedra", "san martin de porres", "smp", "santa rosa",
-        "ate", "breña", "cercado de lima", "jesus maria", "jesús maría", "la victoria", "lince", "magdalena", "miraflores", "pueblo libre", "rimac", "rímac", "san borja", "san isidro", "san luis", "san miguel", "santa anita", "surquillo",
-        "barranco", "chorrillos", "lurin", "lurín", "pachacamac", "pachacámac", "pucusana", "punta hermosa", "punta negra", "san bartolo", "san juan de miraflores", "sjm", "santiago de surco", "surco", "villa el salvador", "ves", "villa maria del triunfo", "vmt",
-        "chaclacayo", "cieneguilla", "el agustino", "la molina", "lurigancho", "chosica", "san juan de lurigancho", "sjl",
-        "callao", "bellavista", "carmen de la legua", "reynoso", "la perla", "la punta", "ventanilla", "mi peru", "mi perú"
-    ]
-
-    def buscar_palabra_exacta(texto, lista_palabras):
-        texto = texto.lower()
-        for palabra in lista_palabras:
-            patron = r'\b' + re.escape(palabra) + r'\b'
-            if re.search(patron, texto):
-                return palabra.upper()
-        return None
-
-    @st.cache_data(ttl=300, show_spinner="Analizando RPP...")
-    def escanear_inteligente():
-        noticias_encontradas = []
-        for pagina in range(1, 4): 
-            try:
-                url_paginada = f"{URL_BASE}?page={pagina}"
-                response = requests.get(url_paginada, headers=HEADERS, timeout=10)
-                if response.status_code == 200:
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    titulares = soup.find_all(['h2', 'h3'])
-                    for header in titulares:
-                        enlace = header.find('a')
-                        if enlace:
-                            titulo_texto = enlace.text.strip()
-                            url_noticia = enlace.get('href')
-                            if url_noticia and not url_noticia.startswith("http"):
-                                url_noticia = "https://rpp.pe" + url_noticia
-                            
-                            if any(seccion in url_noticia for seccion in EXCLUSIONES_URL): continue 
-                            if buscar_palabra_exacta(titulo_texto, EXCLUSIONES_TITULO): continue
-                            
-                            distrito = buscar_palabra_exacta(titulo_texto, DISTRITOS_INTEGRADOS)
-                            delito = buscar_palabra_exacta(titulo_texto, PALABRAS_CLAVE)
-                            
-                            ubicacion_final = district if (district := distrito) else "⚠️ No Especificado"
-                            
-                            # Filtro: Distrito O Delito
-                            if distrito or delito:
-                                noticias_encontradas.append({
-                                    "Titular": titulo_texto,
-                                    "Distrito": ubicacion_final,
-                                    "Enlace": url_noticia
-                                })
-                time.sleep(0.5)
-            except Exception:
-                continue
-        return pd.DataFrame(noticias_encontradas)
-
-    # --- 3. EJECUCIÓN DEL SCRAPING (¡ESTO VA ANTES DE DIBUJAR!) ---
-    df_nuevas = escanear_inteligente()
-    
-    if not df_nuevas.empty:
-        df_total = pd.concat([st.session_state['historial_noticias'], df_nuevas])
-        df_total = df_total.drop_duplicates(subset=["Titular"], keep='last')
-        st.session_state['historial_noticias'] = df_total
-
-    # --- 4. INTERFAZ GRÁFICA (Ahora sí dibujamos con los datos listos) ---
-    
-    st.title("🛡️ Monitor de Criminalidad (Lima + Callao)")
-    st.markdown("Visualización en tiempo real de incidentes de seguridad ciudadana reportados por medios digitales.")
-    st.write("---") 
-
-    # ==============================================================================
-    # BLOQUE 1: NOTICIAS RPP
-    # ==============================================================================
-    with st.container(border=True):
-        col_rpp_title, col_rpp_metrics = st.columns([2, 3])
-        
-        with col_rpp_title:
-            st.subheader("📰 Noticias RPP")
-        
-        with col_rpp_metrics:
-            fecha_hoy = datetime.now().strftime("%d/%m/%Y")
-            # AHORA ESTE NÚMERO SERÁ EL CORRECTO PORQUE YA ACTUALIZAMOS ARRIBA
-            n_noticias = len(st.session_state['historial_noticias'])
-            st.markdown(f"<div style='text-align: right;'>📅 <b>{fecha_hoy}</b> | 🚨 Capturadas: <b>{n_noticias}</b></div>", unsafe_allow_html=True)
-
-        with st.expander("ℹ️ Detalles del Funcionamiento (RPP)", expanded=False):
-            st.markdown("""
-            * ⏱️ **Frecuencia:** Escaneo automático cada **5 minutos**.
-            * 🔍 **Filtro:** Detecta palabras clave (Robo, Sicariato, etc.) y bloquea farándula/deportes.
-            * 📍 **Geo:** Busca coincidencias exactas de los 50 distritos de Lima y Callao.
-            """)
-
-        df_final = st.session_state['historial_noticias']
-
-        if not df_final.empty:
-            df_view = df_final[["Titular", "Distrito", "Enlace"]]
-            st.dataframe(
-                df_view,
-                column_config={
-                    "Enlace": st.column_config.LinkColumn("Fuente", display_text="Leer Nota"),
-                    "Distrito": st.column_config.TextColumn("Ubicación", width="medium"),
-                    "Titular": st.column_config.TextColumn("Noticia", width="large"),
-                },
-                use_container_width=True,
-                hide_index=True 
-            )
-        else:
-            st.info("Sin alertas recientes en esta fuente.")
-
-        if st.button("🔄 Escanear RPP", key="scan_rpp"):
-            escanear_inteligente.clear()
-            st.rerun()
 # -----------------------------
-# SECCIÓN 4: EQUIPO
+# SECCIÓN: EMERGENCIAS
+# -----------------------------
+elif menu == "Emergencias":
+    st.title("📞 Centrales de Emergencia")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.error("### 👮 PNP: 105")
+    with col2:
+        st.warning("### 🚒 Bomberos: 116")
+    with col3:
+        st.info("### 🚑 SAMU: 106")
+
+# -----------------------------
+# SECCIÓN: EQUIPO
 # -----------------------------
 elif menu == "Equipo":
+    # Mismo código de tu compañero para el equipo
     st.markdown("""
-    <style>
-        .team-container {
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 40px;
-            margin-top: 50px;
-        }
-        .member-card {
-            background-color: #f8f9fa;
-            border-top: 5px solid #D32F2F; /* Rojo Alerta */
-            border-radius: 15px;
-            padding: 30px;
-            width: 250px;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.3s;
-        }
-        .member-card:hover {
-            transform: translateY(-10px);
-        }
-        .member-name {
-            font-size: 18px;
-            font-weight: bold;
-            color: #333;
-            margin-top: 15px;
-        }
-        .member-role {
-            color: #666;
-            font-size: 0.85em;
-            margin-bottom: 15px;
-        }
-        .avatar {
-            font-size: 50px;
-        }
-        .github-btn {
-            text-decoration: none; 
-            color: #D32F2F; 
-            font-weight: bold;
-            border: 1px solid #D32F2F;
-            padding: 5px 15px;
-            border-radius: 20px;
-            transition: all 0.3s ease;
-        }
-        .github-btn:hover {
-            background-color: #D32F2F;
-            color: white;
-        }
-    </style>
     <h2 style="text-align:center;">👥 El Equipo</h2>
-    <p style="text-align:center;">Estudiantes de Ingeniería Estadística e Informática - UNALM</p>
-    <div class="team-container">
-    <div class="member-card">
-    <div class="avatar">👨‍💻</div>
-    <div class="member-name">Daniel Ormeño Sakihama</div>
-    <div class="member-role">Ingeniería Estadística Informática</div>
-    <a href="https://github.com/Orsaki" target="_blank" class="github-btn">GitHub Profile</a>
+    <div style="display:flex; justify-content:center; gap:20px; flex-wrap:wrap;">
+        <div style="background:#f9f9f9; padding:20px; border-radius:10px; border-top: 4px solid #D32F2F; width:200px; text-align:center;">
+            <h3>👨‍💻</h3>
+            <p><b>Daniel Ormeño</b></p>
+        </div>
+        <div style="background:#f9f9f9; padding:20px; border-radius:10px; border-top: 4px solid #D32F2F; width:200px; text-align:center;">
+            <h3>👨‍💻</h3>
+            <p><b>Luis Huamayalli</b></p>
+        </div>
+        <div style="background:#f9f9f9; padding:20px; border-radius:10px; border-top: 4px solid #D32F2F; width:200px; text-align:center;">
+            <h3>👩‍💻</h3>
+            <p><b>Pamela Lázaro</b></p>
+        </div>
     </div>
-    <div class="member-card">
-    <div class="avatar">👨‍💻</div>
-    <div class="member-name">Luis Huamayalli</div>
-    <div class="member-role">Ingeniería Estadística Informática</div>
-    <a href="https://github.com/Albert-ca" target="_blank" class="github-btn">GitHub Profile</a>
-    </div>
-    <div class="member-card">
-    <div class="avatar">👩‍💻</div>
-    <div class="member-name">Pamela Lázaro</div>
-    <div class="member-role">Ingeniería Estadística Informática</div>
-    <a href="https://github.com/lazaropamela" target="_blank" class="github-btn">GitHub Profile</a>
-    </div>
-    <div class="member-card">
-    <div class="avatar">👩‍💻</div>
-    <div class="member-name">Fátima Montes</div>
-    <div class="member-role">Ingeniería Estadística Informática</div>
-    <a href="https://github.com/FatimaMY" target="_blank" class="github-btn">GitHub Profile</a>
-    </div>
-    </div>
-
     """, unsafe_allow_html=True)
-
-
