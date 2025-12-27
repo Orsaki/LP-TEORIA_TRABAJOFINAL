@@ -490,4 +490,5 @@ elif menu == "Equipo":
     <a href="https://github.com/FatimaMY" target="_blank" class="github-btn">GitHub Profile</a>
     </div>
     </div>
+
     """, unsafe_allow_html=True)
