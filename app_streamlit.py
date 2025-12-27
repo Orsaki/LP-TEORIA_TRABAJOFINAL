@@ -312,6 +312,20 @@ elif menu == "Mapa del Crimen":
             else:
                 lat_c, lon_c = -12.0464, -77.0428
                 zoom_c = 11
+            # --- COMMIT 18: RESUMEN DE CASOS CRÍTICOS ---
+            # Filtramos solo los que nuestra lógica marcó como ROJO [255, 0, 0, 200]
+            df_criticos = df_filtrado[df_filtrado['color'].apply(lambda x: x == [255, 0, 0, 200])]
+
+            if not df_criticos.empty:
+                # Mostramos un cuadro rojo con el conteo de casos graves
+                st.error(f"🚨 **ALERTA DE SEGURIDAD:** Se han detectado {len(df_criticos)} incidentes críticos (Homicidios/Sicariato) en las últimas horas.")
+                
+                # Opcional: Mostrar los titulares de esos casos críticos en una lista pequeña
+                with st.expander("Ver detalle de alertas críticas"):
+                    for _, row in df_criticos.iterrows():
+                        st.markdown(f"• **{row['Distrito']}:** {row['Titular']}")
+            else:
+                st.success("✅ No se detectaron incidentes críticos de alta violencia en el escaneo actual.")
 
             st.pydeck_chart(pdk.Deck(
                 map_style='road',
