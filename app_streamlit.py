@@ -473,12 +473,6 @@ elif menu == "Análisis por Periódico":
         df_total = df_total.drop_duplicates(subset=["Titular"], keep='last')
         st.session_state['historial_noticias'] = df_total
 
-    # --- 4. INTERFAZ GRÁFICA (Ahora sí dibujamos con los datos listos) ---
-    
-    st.title("🛡️ Monitor de Criminalidad (Lima + Callao)")
-    st.markdown("Visualización en tiempo real de incidentes de seguridad ciudadana reportados por medios digitales.")
-    st.write("---") 
-
 # -----------------------------
 # SECCIÓN 4: EQUIPO
 # -----------------------------
