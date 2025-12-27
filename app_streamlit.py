@@ -102,7 +102,6 @@ st.set_page_config(
     page_icon="🚨", 
     layout="wide"
 )
-# --- 3. MEMORIA COMPARTIDA (Session State) ---
 if 'historial_noticias' not in st.session_state:
     st.session_state['historial_noticias'] = escanear_inteligente()
 
