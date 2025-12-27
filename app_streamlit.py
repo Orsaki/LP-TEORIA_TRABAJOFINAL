@@ -104,7 +104,6 @@ st.set_page_config(
 )
 # --- 3. MEMORIA COMPARTIDA (Session State) ---
 if 'historial_noticias' not in st.session_state:
-    # La primera vez que carga, busca noticias automáticamente
     st.session_state['historial_noticias'] = escanear_inteligente()
 
 # -----------------------------
