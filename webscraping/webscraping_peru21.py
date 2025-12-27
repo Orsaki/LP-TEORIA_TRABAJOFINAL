@@ -1,14 +1,26 @@
 import requests
 from bs4 import BeautifulSoup
-import csv
-from config import HEADERS, PALABRAS_CLAVE
+import re
+import sys
+import os
+
+# conexión con config.py
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from config import HEADERS, PALABRAS_CLAVE, DISTRITOS_INTEGRADOS
 
 URL_WEB = "https://peru21.pe/lima/"
-NOMBRE_ARCHIVO = "noticias_peru21_filtradas.csv"
+
+def buscar_palabra_exacta(texto, lista):
+    texto = texto.lower()
+    for palabra in lista:
+        if re.search(r'\b' + re.escape(palabra) + r'\b', texto):
+            return palabra.upper()
+    return None
 
 
-def extraer_noticias_peru21():
-    print("📡 Navegando en Perú21...")
+def obtener_noticias():
+    noticias = []
+    print("📡 Escaneando Perú21...")
 
     try:
         response = requests.get(URL_WEB, headers=HEADERS)
@@ -17,36 +29,30 @@ def extraer_noticias_peru21():
             soup = BeautifulSoup(response.content, "html.parser")
             articulos = soup.find_all("article")
 
-            with open(NOMBRE_ARCHIVO, "w", newline="", encoding="utf-8") as file:
-                writer = csv.writer(file)
-                writer.writerow(["Titulo", "Link", "Fuente"])
+            for art in articulos:
+                h = art.find("h2")
+                a = art.find("a")
 
-                contador = 0
-                for art in articulos:
-                    h = art.find("h2")
-                    a = art.find("a")
+                if h and a:
+                    titulo = h.text.strip()
+                    link = a.get("href")
 
-                    if h and a:
-                        titulo = h.text.strip()
-                        link = a.get("href")
+                    if link and not link.startswith("http"):
+                        link = "https://peru21.pe" + link
 
-                        if link and not link.startswith("http"):
-                            link = "https://peru21.pe" + link
+                    delito = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
+                    distrito = buscar_palabra_exacta(titulo, DISTRITOS_INTEGRADOS)
 
-                        # Filtramos usando las palabras clave importadas
-                        if any(p in titulo.lower() for p in PALABRAS_CLAVE):
-                            writer.writerow([titulo, link, "Perú21"])
-                            contador += 1
-                            print(f"   -> Encontrado: {titulo[:40]}...")
-
-            print(f"🎉 Finalizado Perú21. Noticias guardadas: {contador}")
-        else:
-            print(f"❌ Error al conectar con Perú21: {response.status_code}")
+                    if delito:
+                        noticias.append({
+                            "Titular": titulo,
+                            "Enlace": link,
+                            "Fuente": "Perú21",
+                            "Distrito": distrito if distrito else "⚠️ No Especificado",
+                            "Categoría": delito
+                        })
 
     except Exception as e:
-        print(f"❌ Error inesperado en Perú21: {e}")
+        print(f"❌ Error en Perú21: {e}")
 
-
-# Esto permite probar este archivo individualmente
-if __name__ == "__main__":
-    extraer_noticias_peru21()
+    return noticias
