@@ -1,62 +1,118 @@
-# Librerias
+from config import HEADERS, PALABRAS_CLAVE, DISTRITOS_INTEGRADOS
 import requests
 from bs4 import BeautifulSoup
-import csv
-from config import HEADERS, PALABRAS_CLAVE
+import re
+import sys
+import os
 
-# EL COMERCIO - PERU
-# Sección con temas policiales/delitos
-URL_WEB = "https://elcomercio.pe/lima/judiciales/"
-NOMBRE_ARCHIVO = "noticias_elcomercio_filtradas.csv"
+# --- CONEXIÓN CON CONFIG.PY ---
+# Agregamos la ruta padre para importar las listas generales
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Función para extraer noticias de El Comercio
+# Usamos la sección "Lima" para captar más noticias locales
+URL_WEB = "https://elcomercio.pe/lima/"
+
+# ============================================================================
+# FILTROS
+# ============================================================================
+
+# Secciones de El Comercio que no nos interesan
+SECCIONES_IGNORAR = [
+    "/deporte-total/", "/tvmas/", "/luces/", "/gastronomia/", "/tecnologia/",
+    "/ciencias/", "/economia/", "/mundo/", "/opinion/", "/respuestas/", "/hogar/"
+]
+
+# ============================================================================
+# FUNCIONES AUXILIARES
+# ============================================================================
 
 
-def extraer_noticias_comercio():
-    print(f"📡 Navegando en El Comercio: {URL_WEB}...")
+def buscar_palabra_exacta(texto, lista_palabras):
+    """Busca si una palabra de la lista está en el texto."""
+    texto = texto.lower()
+    for palabra in lista_palabras:
+        # \b sirve para que no detecte "mate" dentro de "tomate"
+        patron = r'\b' + re.escape(palabra) + r'\b'
+        if re.search(patron, texto):
+            return palabra.upper()
+    return None
+
+# ============================================================================
+# FUNCIÓN PRINCIPAL DE SCRAPING
+# ============================================================================
+
+
+def obtener_noticias():
+    noticias = []
+    print(f"📡 Escaneando El Comercio (Modelo Estandarizado)...")
 
     try:
-        response = requests.get(URL_WEB, headers=HEADERS)
+        response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
 
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
-            titulares = soup.find_all('h2')
+            # El Comercio suele usar h2 para sus titulares en listas
+            elementos = soup.find_all(['h2', 'h3'])
 
-            print(f"Se leyeron {len(titulares)} titulares. Filtrando...")
+            for item in elementos:
+                enlace = item.find('a')
+                if enlace:
+                    titulo_texto = enlace.text.strip()
+                    url_parcial = enlace.get('href')
 
-            with open(NOMBRE_ARCHIVO, mode='w', newline='', encoding='utf-8') as file:
-                writer = csv.writer(file)
-                writer.writerow(["Titulo", "Link", "Fuente"])
+                    # --- LIMPIEZA BÁSICA ---
+                    if not url_parcial or len(titulo_texto) < 15:
+                        continue
 
-                contador = 0
-                for header in titulares:
-                    enlace = header.find('a')
+                    # El Comercio usa rutas relativas (ej: /lima/noticia.html)
+                    if not url_parcial.startswith("http"):
+                        url_noticia = "https://elcomercio.pe" + url_parcial
+                    else:
+                        url_noticia = url_parcial
 
-                    if enlace:
-                        titulo_texto = enlace.text.strip()
-                        url_relativa = enlace.get('href')
-                        # El Comercio usa links relativos, hay que completar la URL
-                        url_noticia = "https://elcomercio.pe" + \
-                            url_relativa if url_relativa.startswith(
-                                '/') else url_relativa
+                    # --- FILTRO SOLO POR URL ---
+                    if any(seccion in url_noticia for seccion in SECCIONES_IGNORAR):
+                        continue
 
-                        titulo_lower = titulo_texto.lower()
+                    # --- ANÁLISIS ---
+                    distrito_detectado = buscar_palabra_exacta(
+                        titulo_texto, DISTRITOS_INTEGRADOS)
+                    delito_detectado = buscar_palabra_exacta(
+                        titulo_texto, PALABRAS_CLAVE)
 
-                        if any(palabra in titulo_lower for palabra in PALABRAS_CLAVE):
-                            writer.writerow(
-                                [titulo_texto, url_noticia, "El Comercio"])
-                            contador += 1
-                            print(f"   -> Encontrado: {titulo_texto[:45]}...")
+                    # --- REGLA DE ACEPTACIÓN (IGUAL A RPP) ---
 
-            print(
-                f"🎉 Finalizado. Se guardaron {contador} noticias en: {NOMBRE_ARCHIVO}")
+                    # 1. Detectamos un DELITO (Prioridad Alta)
+                    if delito_detectado:
+                        ubicacion = distrito_detectado if distrito_detectado else "⚠️ No Especificado"
+                        noticias.append({
+                            "Titular": titulo_texto,
+                            "Enlace": url_noticia,
+                            "Fuente": "El Comercio",
+                            "Distrito": ubicacion,
+                            "Categoría": delito_detectado
+                        })
 
-        else:
-            print(f"Error al conectar: {response.status_code}")
+                    # 2. La URL dice explícitamente secciones de seguridad
+                    elif "/sucesos/" in url_noticia or "/judiciales/" in url_noticia or "/policiales/" in url_noticia:
+                        ubicacion = distrito_detectado if distrito_detectado else "⚠️ No Especificado"
+                        noticias.append({
+                            "Titular": titulo_texto,
+                            "Enlace": url_noticia,
+                            "Fuente": "El Comercio",
+                            "Distrito": ubicacion,
+                            "Categoría": "Policiales/Sucesos"
+                        })
 
     except Exception as e:
-        print(f"Error inesperado: {e}")
+        print(f"❌ Error en El Comercio: {e}")
+
+    return noticias
 
 
+# Bloque de prueba individual
 if __name__ == "__main__":
-    extraer_noticias_comercio()
+    mis_noticias = obtener_noticias()
+    print(f"Resumen: Se encontraron {len(mis_noticias)} noticias.")
+    for n in mis_noticias:
+        print(f"✅ [{n['Distrito']}] {n['Titular']}")
