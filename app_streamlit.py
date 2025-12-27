@@ -256,7 +256,8 @@ if menu == "Inicio":
 elif menu == "Mapa del Crimen":
     st.title("📍 Alerta de Delitos en Tiempo Real")
     
-    df_noticias = st.session_state.get('historial_noticias', pd.DataFrame())
+    # 1. Recuperamos la base de datos de la memoria
+    df_base = st.session_state.get('historial_noticias', pd.DataFrame())
 
     col_control, col_map = st.columns([1, 4])
 
@@ -264,77 +265,73 @@ elif menu == "Mapa del Crimen":
         st.subheader("Filtros")
         distrito_sel = st.selectbox("Seleccionar Distrito", ["Todos"] + list(COORDENADAS_LIMA.keys()))
         
-        # --- AGREGA ESTO AQUÍ ---
-        st.write("---")
-        opcion_gravedad = st.radio("Gravedad de Alerta:", ["Todos", "Solo Críticos", "Otros"])
+        # Filtro de Gravedad
+        gravedad_sel = st.radio("Gravedad:", ["Todos", "Solo Críticos", "Otros"])
         
-        st.write("---")
-        opcion_fuente = st.multiselect(
-            "Filtrar por Periódico:", 
+        # Filtro de Periódico (¡Aquí es donde eliges RPP, etc.!)
+        fuentes_sel = st.multiselect(
+            "Filtrar Periódico:", 
             ["RPP", "El Comercio", "La República"], 
             default=["RPP", "El Comercio", "La República"]
         )
-        # ------------------------
-
-        if st.button("Actualizar Vista"):
-            st.toast("Cambiando enfoque...", icon="🔍")
 
     with col_map:
-        # 2. LÓGICA DE ENFOQUE (Zoom dinámico)
-        # Si selecciona un distrito, usamos sus coordenadas; si es "Todos", usamos el centro de Lima.
-        if distrito_sel != "Todos":
-            coords_foco = COORDENADAS_LIMA[distrito_sel]
-            zoom_actual = 14  # Más cerca para ver el distrito
-        else:
-            coords_foco = [-12.0464, -77.0428] # Centro de Lima
-            zoom_actual = 10.5 # Vista general
+        if not df_base.empty:
+            # --- PASO CLAVE: FILTRAR LOS DATOS ANTES DE DIBUJAR ---
+            df_filtrado = df_base.copy()
 
-        if not df_noticias.empty:
-            df_mapa = df_noticias.copy()
-            def get_lat_lon(dist):
-                name = dist.replace("⚠️ ", "").strip().upper()
-                return COORDENADAS_LIMA.get(name, [None, None])
-            def asignar_color(titular):
+            # A. Filtro por Fuente (RPP, El Comercio, etc.)
+            if fuentes_sel:
+                df_filtrado = df_filtrado[df_filtrado['Fuente'].isin(fuentes_sel)]
+
+            # B. Filtro por Gravedad (Usando tu lógica de color)
+            # Primero asignamos el color para saber quién es crítico
+            def asignar_color_local(titular):
                 criticos = ["MUERTE", "ASESINATO", "SICARIO", "HOMICIDIO", "BALEAN"]
-                if any(palabra in titular.upper() for palabra in criticos):
-                    return [255, 0, 0, 200] # Rojo puro para casos graves
-                return [255, 165, 0, 200]    # Naranja para otros delitos
-
-            df_mapa['color'] = df_mapa['Titular'].apply(asignar_color)
+                if any(p in titular.upper() for p in criticos):
+                    return [255, 0, 0, 200] # Rojo
+                return [255, 165, 0, 200]    # Naranja
             
-            
-            df_mapa['coords'] = df_mapa['Distrito'].apply(get_lat_lon)
-            df_mapa['lat'] = df_mapa['coords'].apply(lambda x: x[0])
-            df_mapa['lon'] = df_mapa['coords'].apply(lambda x: x[1])
-            df_final = df_mapa.dropna(subset=['lat'])
+            df_filtrado['color'] = df_filtrado['Titular'].apply(asignar_color_local)
 
-            # 3. DIBUJAR MAPA CON VISTA DINÁMICA
+            if gravedad_sel == "Solo Críticos":
+                df_filtrado = df_filtrado[df_filtrado['color'].apply(lambda x: x == [255, 0, 0, 200])]
+            elif gravedad_sel == "Otros":
+                df_filtrado = df_filtrado[df_filtrado['color'].apply(lambda x: x == [255, 165, 0, 200])]
+
+            # C. Asignar coordenadas a los datos que pasaron el filtro
+            df_filtrado['coords'] = df_filtrado['Distrito'].apply(lambda x: COORDENADAS_LIMA.get(x.upper(), [None, None]))
+            df_final = df_filtrado.dropna(subset=['coords'])
+            df_final['lat'] = df_final['coords'].apply(lambda x: x[0])
+            df_final['lon'] = df_final['coords'].apply(lambda x: x[1])
+
+            # --- DIBUJAR EL MAPA CON LOS DATOS FILTRADOS ---
+            # Determinamos el centro del mapa
+            if distrito_sel != "Todos":
+                lat_c, lon_c = COORDENADAS_LIMA[distrito_sel]
+                zoom_c = 14
+            else:
+                lat_c, lon_c = -12.0464, -77.0428
+                zoom_c = 11
+
             st.pydeck_chart(pdk.Deck(
-                map_style='road', # O 'mapbox://styles/mapbox/dark-v10' si tienes Token
-                initial_view_state=pdk.ViewState(
-                    latitude=coords_foco[0], # <--- Usa la latitud del distrito
-                    longitude=coords_foco[1], # <--- Usa la longitud del distrito
-                    zoom=zoom_actual,         # <--- Cambia el zoom
-                    pitch=45
-                ),
+                map_style='road',
+                initial_view_state=pdk.ViewState(latitude=lat_c, longitude=lon_c, zoom=zoom_c, pitch=45),
                 layers=[
                     pdk.Layer(
                         "ScatterplotLayer",
-                        df_final,
+                        df_final, # <--- ¡IMPORTANTE!: Usamos el DF filtrado
                         get_position='[lon, lat]',
-                        get_color='[255, 0, 0, 180]',
-                        get_radius=150, # Radio pequeño para precisión
+                        get_color='color',
+                        get_radius=150,
                         pickable=True,
-                        radius_min_pixels=4,
-                        radius_max_pixels=10
                     ),
                 ],
-                tooltip={"text": "{Titular}\nUbicación: {Distrito}"}
+                tooltip={"text": "🚨 {Titular}\n📰 Fuente: {Fuente}"}
             ))
-            st.success(f"Enfocado en: {distrito_sel}. Mostrando {len(df_final)} alertas.")
+            st.success(f"Mostrando {len(df_final)} noticias de: {', '.join(fuentes_sel)}")
         else:
-            st.warning("⚠️ Sin datos. Ve a 'Análisis por Periódico' y pulsa 'Escanear RPP'.") 
-
+            st.warning("⚠️ No hay datos cargados. Escanea noticias en la pestaña de Análisis.")
 # -----------------------------
 # SECCIÓN 3: ANÁLISIS POR PERIÓDICO (UNIFICADO)
 # -----------------------------
