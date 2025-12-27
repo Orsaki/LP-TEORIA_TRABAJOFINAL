@@ -580,36 +580,27 @@ elif menu == "Equipo":
     </div>
     """, unsafe_allow_html=True)
     # --- AGREGA ESTE BLOQUE AL FINAL (Commit 14) ---
-elif menu == "Emergencia":
+
+# --- BUSCA ESTA LÍNEA Y ASEGÚRATE QUE TENGA LA "S" AL FINAL ---
+elif menu == "Emergencias": 
     st.title("📞 Centrales de Emergencia y Ayuda")
     st.markdown("Contactos directos para asistencia inmediata en Lima Metropolitana y Callao.")
     st.write("---")
 
-    # Creamos 3 columnas para los números principales
     col1, col2, col3 = st.columns(3)
-
     with col1:
         st.error("### 👮 PNP")
         st.subheader("105")
-        st.write("Central de Emergencias de la Policía Nacional del Perú.")
-
+        st.write("Policía Nacional del Perú.")
     with col2:
         st.warning("### 🚒 Bomberos")
         st.subheader("116")
-        st.write("Atención de incendios, rescates y urgencias médicas.")
-
+        st.write("Incendios y rescates.")
     with col3:
         st.info("### 🚑 SAMU")
         st.subheader("106")
-        st.write("Servicio de Atención Móvil de Urgencia (Minsa).")
+        st.write("Urgencias médicas.")
 
     st.write("---")
-    
-    # Información adicional
     with st.expander("📌 Otros números importantes"):
-        st.write("""
-        * **Serenazgo de Lima:** (01) 318-5050
-        * **Violencia Familiar (Línea 100):** 100
-        * **Defensa Civil:** 115
-        * **Cruz Roja:** (01) 266-0481
-        """)
+        st.write("* **Serenazgo de Lima:** (01) 318-5050")
