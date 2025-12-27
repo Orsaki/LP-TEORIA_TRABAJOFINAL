@@ -1,64 +1,115 @@
 import requests
 from bs4 import BeautifulSoup
-import csv
-from config import HEADERS, PALABRAS_CLAVE
-# Usamos el enlace que tú sugeriste (que sí funciona)
+import re
+import sys
+import os
+
+# --- CONEXIÓN CON CONFIG.PY ---
+# Agregamos la ruta padre para importar las listas generales
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from config import HEADERS, PALABRAS_CLAVE, DISTRITOS_INTEGRADOS
+
 URL_WEB = "https://rpp.pe/ultimas-noticias"
-NOMBRE_ARCHIVO = "noticias_rpp_filtradas.csv"
+
+# ============================================================================
+# FILTROS
+# ============================================================================
+
+# FILTRO DE URL: Solo conservamos esto. Es seguro.
+# Si RPP clasifica la nota en estas secciones, la ignoramos para evitar basura obvia.
+SECCIONES_IGNORAR = [
+    "/famosos/", "/entretenimiento/", "/deportes/", "/futbol/", "/voley/", 
+    "/automovilismo/", "/tecnologia/", "/ciencia/", "/salud/", "/economia/", 
+    "/mundo/", "/horoscopo/", "/vital/"
+]
 
 
-def extraer_noticias_html():
-    print(f"📡 Navegando en: {URL_WEB}...")
+# ============================================================================
+# FUNCIONES AUXILIARES
+# ============================================================================
+
+def buscar_palabra_exacta(texto, lista_palabras):
+    """Busca si una palabra de la lista está en el texto."""
+    texto = texto.lower()
+    for palabra in lista_palabras:
+        # \b sirve para que no detecte "mate" dentro de "tomate"
+        patron = r'\b' + re.escape(palabra) + r'\b'
+        if re.search(patron, texto):
+            return palabra.upper()
+    return None
+
+# ============================================================================
+# FUNCIÓN PRINCIPAL DE SCRAPING
+# ============================================================================
+
+def obtener_noticias():
+    noticias = []
+    print(f"📡 Escaneando RPP (Sin palabras prohibidas)...")
 
     try:
-        response = requests.get(URL_WEB, headers=HEADERS)
-
+        response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
+        
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
+            elementos = soup.find_all(['h2', 'h3'])
 
-            # En RPP, los titulares suelen ser h2 o h3. Buscamos ambos.
-            titulares = soup.find_all(['h2', 'h3'])
+            for item in elementos:
+                enlace = item.find('a')
+                if enlace:
+                    titulo_texto = enlace.text.strip()
+                    url_parcial = enlace.get('href')
 
-            print(
-                f"👀 Se leyeron {len(titulares)} titulares en total. Filtrando por seguridad...")
+                    # --- LIMPIEZA BÁSICA ---
+                    if not url_parcial or len(titulo_texto) < 15:
+                        continue 
 
-            with open(NOMBRE_ARCHIVO, mode='w', newline='', encoding='utf-8') as file:
-                writer = csv.writer(file)
-                writer.writerow(["Titulo", "Link", "Categoria"])
+                    if not url_parcial.startswith("http"):
+                        url_noticia = "https://rpp.pe" + url_parcial
+                    else:
+                        url_noticia = url_parcial
 
-                contador = 0
-                for header in titulares:
-                    enlace = header.find('a')
+                    # --- FILTRO SOLO POR URL ---
+                    # Si viene de una sección basura, la saltamos.
+                    if any(seccion in url_noticia for seccion in SECCIONES_IGNORAR):
+                        continue
 
-                    if enlace:
-                        titulo_texto = enlace.text.strip()
-                        url_noticia = enlace.get('href')
+                    # --- ANÁLISIS ---
+                    distrito_detectado = buscar_palabra_exacta(titulo_texto, DISTRITOS_INTEGRADOS)
+                    delito_detectado = buscar_palabra_exacta(titulo_texto, PALABRAS_CLAVE)
 
-                        # Convertimos a minúsculas para buscar mejor
-                        titulo_lower = titulo_texto.lower()
+                    # --- REGLA DE ACEPTACIÓN ---
+                    # Aceptamos la noticia si cumple CUALQUIERA de estas condiciones:
+                    
+                    # 1. Detectamos un DELITO (La más importante)
+                    if delito_detectado:
+                        ubicacion = distrito_detectado if distrito_detectado else "⚠️ No Especificado"
+                        noticias.append({
+                            "Titular": titulo_texto,
+                            "Enlace": url_noticia,
+                            "Fuente": "RPP",
+                            "Distrito": ubicacion,
+                            "Categoría": delito_detectado
+                        })
+                    
+                    # 2. La URL dice "policiales" o "judiciales"
+                    elif "/policiales/" in url_noticia or "/judiciales/" in url_noticia:
+                         ubicacion = distrito_detectado if distrito_detectado else "⚠️ No Especificado"
+                         noticias.append({
+                            "Titular": titulo_texto,
+                            "Enlace": url_noticia,
+                            "Fuente": "RPP",
+                            "Distrito": ubicacion,
+                            "Categoría": "Policiales/Judiciales"
+                        })
 
-                        # 3. EL FILTRO: ¿El título contiene alguna palabra de seguridad?
-                        if any(palabra in titulo_lower for palabra in PALABRAS_CLAVE):
-                            writer.writerow(
-                                [titulo_texto, url_noticia, "Seguridad/Policial"])
-                            contador += 1
-                            print(f"   -> Encontrado: {titulo_texto[:40]}...")
-
-            if contador > 0:
-                print(
-                    f"🎉 ¡Éxito! Se guardaron {contador} noticias relevantes en: {NOMBRE_ARCHIVO}")
-            else:
-                print(
-                    "⚠️ Se accedió a la web, pero ninguna noticia de hoy contenía las palabras clave.")
-                print(
-                    "Prueba agregando más palabras al filtro o ejecutándolo más tarde.")
-
-        else:
-            print(f"❌ Error al conectar: {response.status_code}")
 
     except Exception as e:
-        print(f"❌ Error inesperado: {e}")
+        print(f"❌ Error en RPP: {e}")
 
+    return noticias
 
 if __name__ == "__main__":
-    extraer_noticias_html()
+    mis_noticias = obtener_noticias()
+    print(f"Resumen: Se encontraron {len(mis_noticias)} noticias.")
+    for n in mis_noticias:
+        print(f"✅ {n['Titular']}")
