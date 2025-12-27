@@ -320,7 +320,7 @@ elif menu == "Mapa del Crimen":
                 layers=[
                     pdk.Layer(
                         "ScatterplotLayer",
-                        df_final, # <--- ¡IMPORTANTE!: Usamos el DF filtrado
+                        df_final, 
                         get_position='[lon, lat]',
                         get_color='color',
                         get_radius=150,
