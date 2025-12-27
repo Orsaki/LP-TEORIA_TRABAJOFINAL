@@ -2,120 +2,125 @@ import pandas as pd
 import os
 import time
 
-# --- IMPORTACIÓN DE TUS SCRAPERS ---
-# Asegúrate de que los nombres de los archivos (.py) y las funciones sean correctos
 try:
+    print("🔄 Importando scrapers...")
     from web_scraping_el_comercio import extraer_noticias_comercio
     from webscraping_larepublica import extraer_noticias_larepublica
     from webscraping_canalN import extraer_noticias_canaln
     from webscraping_diariocorreo import extraer_noticias_correo
-    # Si ya creaste el archivo de Perú21, descomenta la siguiente línea:
     from webscraping_peru21 import extraer_noticias_peru21
+    from webscraping_rpp import extraer_noticias_html as extraer_noticias_rpp
+    from webscraping_infobaePE import extraer_noticias_infobae
+
+    print("✅ Todos los módulos importados correctamente.\n")
+
 except ImportError as e:
-    print(f"❌ Error de importación: {e}")
-    print("Verifica que los nombres de tus archivos .py sean exactos.")
+    print(f"❌ ERROR CRÍTICO: No se pudo importar algún archivo. Detalles: {e}")
+    print("Verifica que todos los archivos .py estén en la misma carpeta.")
+    exit()
+
+# Función principal para ejecutar todos los scrapers
 
 
 def ejecutar_scrapers():
     """Ejecuta secuencialmente todos los scripts de scraping."""
-    print("\n🚀 INICIANDO PROCESO DE EXTRACCIÓN DE NOTICIAS...")
 
-    # 1. El Comercio
-    try:
-        extraer_noticias_comercio()
-    except Exception as e:
-        print(f"⚠️ Error en El Comercio: {e}")
+    # Lista de tuplas: (Función a ejecutar, Nombre para mostrar)
+    scrapers = [
+        (extraer_noticias_comercio, "El Comercio"),
+        (extraer_noticias_larepublica, "La República"),
+        (extraer_noticias_canaln, "Canal N"),
+        (extraer_noticias_correo, "Diario Correo"),
+        (extraer_noticias_peru21, "Perú 21"),
+        (extraer_noticias_rpp, "RPP Noticias"),
+        (extraer_noticias_infobae, "Infobae Perú")]
 
-    # 2. La República
-    try:
-        extraer_noticias_larepublica()
-    except Exception as e:
-        print(f"⚠️ Error en La República: {e}")
+    print("="*50)
+    print("🚀 INICIANDO EXTRACCIÓN DE NOTICIAS")
+    print("="*50)
 
-    # 3. Canal N
-    try:
-        extraer_noticias_canaln()
-    except Exception as e:
-        print(f"⚠️ Error en Canal N: {e}")
+    for funcion, nombre in scrapers:
+        print(f"\n▶️  Ejecutando: {nombre}...")
+        try:
+            start_time = time.time()
+            funcion()  # Ejecuta el scraper
+            elapsed = time.time() - start_time
+            print(f"   ⏱️  Tiempo: {elapsed:.2f} segundos")
+        except Exception as e:
+            print(f"   ⚠️  Error en {nombre}: {e}")
 
-    # 4. Diario Correo
-    try:
-        extraer_noticias_correo()
-    except Exception as e:
-        print(f"⚠️ Error en Diario Correo: {e}")
-
-    # 5. Perú 21 (Opcional, si tienes el archivo)
-    try:
-        # Si no tienes el archivo aún, comenta esta línea
-        if 'extraer_noticias_peru21' in globals():
-            extraer_noticias_peru21()
-    except Exception as e:
-        print(f"⚠️ Error en Perú21: {e}")
+# Unificar datos de todos los CSV generados
 
 
-def unificar_csvs():
-    """Busca los CSV generados y los une en uno solo."""
-    print("\n🔄 UNIFICANDO ARCHIVOS CSV...")
+def unificar_datos():
+    """Lee todos los CSV generados y los une en uno solo."""
 
-    # Lista de nombres exactos de los archivos que generan tus scripts
-    archivos_generados = [
+    print("\n" + "="*50)
+    print("🔄 UNIFICANDO ARCHIVOS CSV")
+    print("="*50)
+
+    # Lista de archivos que generan tus scripts (basado en el código de tus archivos)
+    archivos_csv = [
         "noticias_elcomercio_filtradas.csv",
         "noticias_larepublica_filtradas.csv",
         "noticias_canaln_filtradas.csv",
         "noticias_diariocorreo_filtradas.csv",
-        "noticias_peru21_filtradas.csv"
-    ]
+        "noticias_peru21_filtradas.csv",
+        "noticias_rpp_filtradas.csv",
+        "noticias_infobae_filtradas.csv"]
 
-    lista_dataframes = []
+    dataframes = []
 
-    for archivo in archivos_generados:
+    for archivo in archivos_csv:
         if os.path.exists(archivo):
             try:
                 # Leemos el CSV
                 df = pd.read_csv(archivo)
 
-                # Estandarizamos columnas (nos aseguramos de tener solo las necesarias)
-                # Si tus CSV tienen columnas diferentes, esto evita errores al unir
-                columnas_necesarias = ["Titulo", "Link", "Fuente"]
+                # ESTANDARIZACIÓN DE COLUMNAS
+                # RPP usa 'Categoria' en vez de 'Fuente', lo corregimos aquí:
+                if 'Categoria' in df.columns:
+                    df.rename(columns={'Categoria': 'Fuente'}, inplace=True)
 
-                # Verificamos que existan las columnas mínimas
-                if all(col in df.columns for col in columnas_necesarias):
-                    df_filtrado = df[columnas_necesarias]
-                    lista_dataframes.append(df_filtrado)
+                # Aseguramos tener solo las columnas necesarias
+                cols_necesarias = ["Titulo", "Link", "Fuente"]
+
+                # Verificamos si existen las columnas (o si el archivo está vacío/erróneo)
+                if set(cols_necesarias).issubset(df.columns):
+                    df_filtrado = df[cols_necesarias]
+                    dataframes.append(df_filtrado)
                     print(f"✅ Integrado: {archivo} ({len(df)} registros)")
                 else:
                     print(
-                        f"⚠️ Formato incorrecto en {archivo}. Columnas encontradas: {df.columns}")
-
+                        f"⚠️  Formato incorrecto en {archivo} (columnas distintas).")
             except Exception as e:
                 print(f"❌ Error leyendo {archivo}: {e}")
         else:
-            print(f"⚪ No encontrado (se omitirá): {archivo}")
+            print(f"⚪ No encontrado: {archivo}")
 
-    # Unir todo
-    if lista_dataframes:
-        df_total = pd.concat(lista_dataframes, ignore_index=True)
+    # Concatenar y guardar
+    if dataframes:
+        df_total = pd.concat(dataframes, ignore_index=True)
 
-        # Eliminamos duplicados por LINK (mismo link = misma noticia)
-        cant_inicial = len(df_total)
+        # Eliminar duplicados exactos de Links
+        total_antes = len(df_total)
         df_total.drop_duplicates(subset=['Link'], keep='first', inplace=True)
-        duplicados = cant_inicial - len(df_total)
+        total_despues = len(df_total)
 
-        # Guardamos el resultado final
-        nombre_final = "dataset_unificado.csv"
-        df_total.to_csv(nombre_final, index=False, encoding='utf-8')
+        output_file = "dataset_unificado.csv"
+        df_total.to_csv(output_file, index=False, encoding='utf-8')
 
-        print(f"\n🎉 PROCESO COMPLETADO.")
-        print(f"📊 Total noticias recolectadas: {len(df_total)}")
-        print(f"🗑️  Duplicados eliminados: {duplicados}")
-        print(f"💾 Archivo guardado como: {nombre_final}")
+        print("\n" + "-"*50)
+        print(f"🏆 PROCESO TERMINADO")
+        print(f"📊 Total bruto: {total_antes}")
+        print(f"🗑️  Duplicados eliminados: {total_antes - total_despues}")
+        print(f"💾 DATASET FINAL: {output_file} ({total_despues} noticias)")
+        print("-"*50)
     else:
-        print("\n❌ No se encontraron datos para unificar.")
+        print("\n❌ No se generó ningún dato para unificar.")
 
 
+# Ejecución
 if __name__ == "__main__":
-    # Paso 1: Ejecutar los robots
     ejecutar_scrapers()
-
-    # Paso 2: Unificar la data
-    unificar_csvs()
+    unificar_datos()
