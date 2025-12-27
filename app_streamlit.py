@@ -7,96 +7,14 @@ import requests
 from bs4 import BeautifulSoup
 
 
-import streamlit as st
-
 # -----------------------------
-# CONFIGURACIÓN DE LA PÁGINA (SIEMPRE PRIMERO)
+# CONFIGURACIÓN DE LA PÁGINA
 # -----------------------------
 st.set_page_config(
     page_title="Lima Segura: Monitor de Criminalidad", 
     page_icon="🚨", 
     layout="wide"
 )
-
-# -----------------------------
-# TÍTULO PRINCIPAL CENTRADO
-# -----------------------------
-st.markdown(
-    "<h1 style='text-align: center;'>Sistema de Alerta de Delitos</h1>",
-    unsafe_allow_html=True
-)
-
-# -----------------------------
-# SLIDER DE PORTADAS
-# -----------------------------
-items = [
-    {
-        "title": "Inseguridad ciudadana en Lima",
-        "text": "Impacto en la población",
-        "img": "imagenes/portada1.png"
-    },
-    {
-        "title": "Análisis de delitos",
-        "text": "Zonas de mayor riesgo",
-        "img": "imagenes/portada2.png"
-    }
-]
-
-# estado del slide
-if "slide" not in st.session_state:
-    st.session_state.slide = 0
-
-item = items[st.session_state.slide]
-
-# imagen centrada y tamaño controlado
-col_left, col_center, col_right = st.columns([1, 3, 1])
-
-with col_center:
-    st.image(item["img"], use_container_width=True)
-    st.markdown(
-        f"<h3 style='text-align:center;'>{item['title']}</h3>",
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        f"<p style='text-align:center;'>{item['text']}</p>",
-        unsafe_allow_html=True
-    )
-
-# -----------------------------
-# -----------------------------
-# -----------------------------
-st.markdown("<br>", unsafe_allow_html=True)
-
-# columna única centrada
-_, col_center, _ = st.columns([3, 1, 3])
-
-with col_center:
-    c1, c2 = st.columns(2)
-
-    with c1:
-        if st.button("⬅️Atrás"):
-            st.session_state.slide = (st.session_state.slide - 1) % len(items)
-            st.rerun()
-
-    with c2:
-        if st.button("Adelante➡️"):
-            st.session_state.slide = (st.session_state.slide + 1) % len(items)
-            st.rerun()
-
-
-# detectar clicks
-if "prev" in st.session_state:
-    st.session_state.slide = (st.session_state.slide - 1) % len(items)
-    del st.session_state["prev"]
-    st.rerun()
-
-if "next" in st.session_state:
-    st.session_state.slide = (st.session_state.slide + 1) % len(items)
-    del st.session_state["next"]
-    st.rerun()
-
-
-
 
 
 
@@ -493,4 +411,5 @@ elif menu == "Equipo":
     </div>
 
     """, unsafe_allow_html=True)
+
 
