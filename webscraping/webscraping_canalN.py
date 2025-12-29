@@ -41,7 +41,6 @@ def obtener_noticias():
             response = requests.get(url_base, headers=HEADERS, timeout=10)
 
             if response.status_code != 200:
-                print(f"❌ Error HTTP {response.status_code} en {url_base}")
                 continue
 
             soup = BeautifulSoup(response.content, "html.parser")
@@ -67,12 +66,16 @@ def obtener_noticias():
                 delito = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
                 distrito = buscar_palabra_exacta(titulo, DISTRITOS_INTEGRADOS)
 
+                # 🔒 FILTRO ESTRICTO: SOLO LIMA / CALLAO
+                if not distrito:
+                    continue
+
                 if delito:
                     noticias.append({
                         "Titular": titulo,
                         "Enlace": enlace,
                         "Fuente": "Canal N",
-                        "Distrito": distrito if distrito else "⚠️ No Especificado",
+                        "Distrito": distrito,
                         "Categoría": delito
                     })
                     enlaces_vistos.add(enlace)
