@@ -28,40 +28,52 @@ def buscar_palabra_exacta(texto, lista):
 
 def obtener_noticias():
     noticias = []
+    enlaces_vistos = set()
+
     print("📡 Escaneando Diario Correo...")
 
     try:
         response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
 
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, "html.parser")
-            titulares = soup.find_all("h2")
+        if response.status_code != 200:
+            return noticias
 
-            for h in titulares:
-                a = h.find("a")
-                if not a:
-                    continue
+        soup = BeautifulSoup(response.content, "html.parser")
+        titulares = soup.find_all("h2")
 
-                titulo = a.text.strip()
-                url = a.get("href")
+        for h in titulares:
+            a = h.find("a")
+            if not a:
+                continue
 
-                if not titulo or len(titulo) < 15:
-                    continue
+            titulo = a.text.strip()
+            enlace = a.get("href")
 
-                if url and not url.startswith("http"):
-                    url = "https://diariocorreo.pe" + url
+            if not titulo or len(titulo) < 15:
+                continue
 
-                delito = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
-                distrito = buscar_palabra_exacta(titulo, DISTRITOS_INTEGRADOS)
+            if enlace and not enlace.startswith("http"):
+                enlace = "https://diariocorreo.pe" + enlace
 
-                if delito:
-                    noticias.append({
-                        "Titular": titulo,
-                        "Enlace": url,
-                        "Fuente": "Diario Correo",
-                        "Distrito": distrito if distrito else "⚠️ No Especificado",
-                        "Categoría": delito
-                    })
+            if enlace in enlaces_vistos:
+                continue
+
+            delito = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
+            distrito = buscar_palabra_exacta(titulo, DISTRITOS_INTEGRADOS)
+
+            # 🔒 FILTRO CLAVE: SOLO NOTICIAS DE LIMA / CALLAO
+            if not distrito:
+                continue
+
+            if delito:
+                noticias.append({
+                    "Titular": titulo,
+                    "Enlace": enlace,
+                    "Fuente": "Diario Correo",
+                    "Distrito": distrito,
+                    "Categoría": delito
+                })
+                enlaces_vistos.add(enlace)
 
     except Exception as e:
         print(f"❌ Error en Diario Correo: {e}")
