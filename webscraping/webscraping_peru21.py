@@ -4,55 +4,88 @@ import re
 import sys
 import os
 
-# conexión con config.py
+# --- CONEXIÓN CON CONFIG.PY ---
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import HEADERS, PALABRAS_CLAVE, DISTRITOS_INTEGRADOS
 
 URL_WEB = "https://peru21.pe/lima/"
 
+# ======================================================================
+# FUNCIÓN AUXILIAR
+# ======================================================================
+
 def buscar_palabra_exacta(texto, lista):
     texto = texto.lower()
     for palabra in lista:
-        if re.search(r'\b' + re.escape(palabra) + r'\b', texto):
+        patron = r'\b' + re.escape(palabra) + r'\b'
+        if re.search(patron, texto):
             return palabra.upper()
     return None
 
+# ======================================================================
+# FUNCIÓN PRINCIPAL (CONTRATO STREAMLIT)
+# ======================================================================
 
 def obtener_noticias():
     noticias = []
+    enlaces_vistos = set()
+
     print("📡 Escaneando Perú21...")
 
     try:
-        response = requests.get(URL_WEB, headers=HEADERS)
+        response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
 
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, "html.parser")
-            articulos = soup.find_all("article")
+        if response.status_code != 200:
+            return noticias
 
-            for art in articulos:
-                h = art.find("h2")
-                a = art.find("a")
+        soup = BeautifulSoup(response.content, "html.parser")
+        articulos = soup.find_all("article")
 
-                if h and a:
-                    titulo = h.text.strip()
-                    link = a.get("href")
+        for art in articulos:
+            h = art.find("h2")
+            a = art.find("a")
 
-                    if link and not link.startswith("http"):
-                        link = "https://peru21.pe" + link
+            if not h or not a:
+                continue
 
-                    delito = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
-                    distrito = buscar_palabra_exacta(titulo, DISTRITOS_INTEGRADOS)
+            titulo = h.get_text(strip=True)
+            enlace = a.get("href")
 
-                    if delito:
-                        noticias.append({
-                            "Titular": titulo,
-                            "Enlace": link,
-                            "Fuente": "Perú21",
-                            "Distrito": distrito if distrito else "⚠️ No Especificado",
-                            "Categoría": delito
-                        })
+            if not titulo or len(titulo) < 15 or not enlace:
+                continue
+
+            if not enlace.startswith("http"):
+                enlace = "https://peru21.pe" + enlace
+
+            if enlace in enlaces_vistos:
+                continue
+
+            delito = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
+            distrito = buscar_palabra_exacta(titulo, DISTRITOS_INTEGRADOS)
+
+            # 🔒 FILTRO CLAVE: SOLO LIMA / CALLAO
+            if not distrito:
+                continue
+
+            if delito:
+                noticias.append({
+                    "Titular": titulo,
+                    "Enlace": enlace,
+                    "Fuente": "Perú21",
+                    "Distrito": distrito,
+                    "Categoría": delito
+                })
+                enlaces_vistos.add(enlace)
 
     except Exception as e:
         print(f"❌ Error en Perú21: {e}")
 
+    print(f"✅ Perú21: {len(noticias)} noticias válidas de Lima")
     return noticias
+
+# ======================================================================
+# PRUEBA LOCAL
+# ======================================================================
+if __name__ == "__main__":
+    datos = obtener_noticias()
+    print(f"Resumen: {len(datos)} noticias detectadas.")
