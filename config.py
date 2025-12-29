@@ -1,17 +1,50 @@
 # config.py
 
+# 1. IDENTIDAD DEL ROBOT (HEADERS)
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 }
 
+# 2. DICCIONARIO DE PALABRAS CLAVE (VOCABULARIO AMPLIADO)
 PALABRAS_CLAVE = [
-    "robo", "asalto", "delincuencia", "policia", "policía", "crimen", "sicario", 
-    "balacera", "muerte", "asesinato", "comisaria", "comisaría", "extorsion", "extorsión", 
-    "terna", "captura", "banda", "droga", "operativo", "homicidio", "armas", 
-    "victima", "víctima", "delincuente", "ladrones", "atraco", "disparos", "cadáver", "cuerpo"
+    # --- A. DELITOS CONTRA LA VIDA (Verbos y Sustantivos) ---
+    "asesinato", "asesinan", "asesino", "homicidio", "muerte", "muere", "fallece",
+    "matan", "matar", "crimen", "sicario", "sicariato", "feminicidio",
+    "acribillado", "acribillan", "baleado", "balean", "disparos", "disparan", "balacera",
+    "cadáver", "cuerpo", "hallan cuerpo", "degollado", "descuartizado", "quemado",
+    "envenenado", "estrangulado", "ajuste de cuentas", "tiroteo",
+
+    # --- B. ROBOS Y ASALTOS (Modalidades) ---
+    "robo", "roban", "asaltan", "asalto", "delincuencia", "delincuente", "ladrón", "ladrones",
+    "atraco", "arrebatador", "arrebatan", "raquetero", "raqueteros", "bujiazo",
+    "marca", "marcas", "sacapintas", "cogotero", "tendero", "patrones", 
+    "celular", "mochila", "cartera", "billetera", "autopartes", "desmantelan",
+
+    # --- C. CRIMEN ORGANIZADO Y EXTORSIÓN ---
+    "extorsion", "extorsión", "extorsionadores", "cupos", "cobro de cupos",
+    "vacunas", "gota a gota", "gotagota", "prestamistas", 
+    "banda criminal", "organización criminal", "clan", "cártel", "mafia",
+    "tren de aragua", "los pulpos", "malditos", "hijos de dios",
+
+    # --- D. VIOLENCIA Y AMENAZAS ---
+    "secuestro", "secuestran", "tentativa", "amenaza", "amedrentan", "golpean", "golpiza",
+    "agresión", "violencia", "abuso", "tocamientos", "violación", "ultrajan",
+    "pepean", "pepeado", "pildoritas", "droga", "tráfico ilícito", "microcomercialización",
+
+    # --- E. POLICIALES Y JUSTICIA (Acciones de la autoridad) ---
+    "policia", "policía", "pnp", "comisaria", "comisaría", "serenazgo", "serenos",
+    "captura", "capturan", "detenido", "detienen", "cae", "caen", "intervención", 
+    "intervienen", "operativo", "allanamiento", "desarticulan",
+    "incautan", "decomisan", "fiscalía", "fiscal", "prisión", "cárcel", "marrocas",
+    "terna", "escuadrón verde", "suat", "dirincri", "diviac",
+
+    # --- F. ARMAS Y PELIGRO ---
+    "armas", "arma de fuego", "pistola", "revólver", "fusil", "cuchillo", "navaja", "arma blanca",
+    "granada", "explosivo", "detonación", "dinamita", "artefacto explosivo",
+    "incendio", "siniestro", "fuego", "bomberos", "rescate", "emergencia"
 ]
 
-# Diccionario de coordenadas (para el mapa)
+# 3. GEOLOCALIZACIÓN (COORDENADAS DE DISTRITOS)
 COORDENADAS_LIMA = {
     "ANCON": [-11.7731, -77.1758], "ATE": [-12.0253, -76.9204], "BARRANCO": [-12.1481, -77.0211],
     "BREÑA": [-12.0601, -77.0450], "CARABAYLLO": [-11.8481, -77.0286], "CHACLACAYO": [-11.9723, -76.7694],
@@ -31,5 +64,5 @@ COORDENADAS_LIMA = {
     "VENTANILLA": [-11.8753, -77.1256], "LA PERLA": [-12.0675, -77.1025]
 }
 
-# Lista simple de nombres para buscar en texto
+# 4. LISTA DE DISTRITOS PARA BÚSQUEDA
 DISTRITOS_INTEGRADOS = [d.lower() for d in COORDENADAS_LIMA.keys()]
