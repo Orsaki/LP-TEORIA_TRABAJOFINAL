@@ -4,22 +4,25 @@ from bs4 import BeautifulSoup
 import re
 import sys
 import os
+import time
 
-# --- CONEXIÓN CON CONFIG.PY ---
-# Agregamos la ruta padre para importar las listas generales
+# --- CONEXIÓN CON CONFIG.PY (Igual que tu amigo) ---
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Usamos la sección "Lima" para captar más noticias locales
-URL_WEB = "https://elcomercio.pe/lima/"
+# El Comercio tiene estructura diferente. Usamos la sección LIMA y SUCESOS
+URLS_OBJETIVO = [
+    "https://elcomercio.pe/lima/",
+    "https://elcomercio.pe/lima/sucesos/",
+    "https://elcomercio.pe/lima/judiciales/"
+]
 
 # ============================================================================
-# FILTROS
+# FILTROS DE LIMPIEZA
 # ============================================================================
-
-# Secciones de El Comercio que no nos interesan
 SECCIONES_IGNORAR = [
-    "/deporte-total/", "/tvmas/", "/luces/", "/gastronomia/", "/tecnologia/",
-    "/ciencias/", "/economia/", "/mundo/", "/opinion/", "/respuestas/", "/hogar/"
+    "/politica/", "/economia/", "/opinion/", "/deporte-total/", "/luces/",
+    "/gastronomia/", "/tecnologia/", "/ciencias/", "/respuestas/", "/hogar/",
+    "/mundo/", "/somos/", "/el-dominical/"
 ]
 
 # ============================================================================
@@ -28,91 +31,101 @@ SECCIONES_IGNORAR = [
 
 
 def buscar_palabra_exacta(texto, lista_palabras):
-    """Busca si una palabra de la lista está en el texto."""
     texto = texto.lower()
     for palabra in lista_palabras:
-        # \b sirve para que no detecte "mate" dentro de "tomate"
         patron = r'\b' + re.escape(palabra) + r'\b'
         if re.search(patron, texto):
             return palabra.upper()
     return None
 
 # ============================================================================
-# FUNCIÓN PRINCIPAL DE SCRAPING
+# FUNCIÓN PRINCIPAL (LÓGICA RÉPLICA DE RPP)
 # ============================================================================
 
 
 def obtener_noticias():
     noticias = []
-    print(f"📡 Escaneando El Comercio (Modelo Estandarizado)...")
 
-    try:
-        response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
+    # Escaneamos las secciones principales
+    for url_base in URLS_OBJETIVO:
+        print(f"📡 Escaneando El Comercio: {url_base}...")
 
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            # El Comercio suele usar h2 para sus titulares en listas
-            elementos = soup.find_all(['h2', 'h3'])
+        try:
+            response = requests.get(url_base, headers=HEADERS, timeout=10)
 
-            for item in elementos:
-                enlace = item.find('a')
-                if enlace:
-                    titulo_texto = enlace.text.strip()
-                    url_parcial = enlace.get('href')
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                # El Comercio usa h2 para titulares principales
+                elementos = soup.find_all(['h2', 'h3'])
 
-                    # --- LIMPIEZA BÁSICA ---
-                    if not url_parcial or len(titulo_texto) < 15:
-                        continue
+                for item in elementos:
+                    enlace = item.find('a')
+                    if enlace:
+                        titulo_texto = enlace.text.strip()
+                        url_parcial = enlace.get('href')
 
-                    # El Comercio usa rutas relativas (ej: /lima/noticia.html)
-                    if not url_parcial.startswith("http"):
-                        url_noticia = "https://elcomercio.pe" + url_parcial
-                    else:
-                        url_noticia = url_parcial
+                        # Limpieza básica
+                        if not url_parcial or len(titulo_texto) < 15:
+                            continue
 
-                    # --- FILTRO SOLO POR URL ---
-                    if any(seccion in url_noticia for seccion in SECCIONES_IGNORAR):
-                        continue
+                        # Completar URL (El Comercio usa rutas relativas)
+                        if not url_parcial.startswith("http"):
+                            url_noticia = "https://elcomercio.pe" + url_parcial
+                        else:
+                            url_noticia = url_parcial
 
-                    # --- ANÁLISIS ---
-                    distrito_detectado = buscar_palabra_exacta(
-                        titulo_texto, DISTRITOS_INTEGRADOS)
-                    delito_detectado = buscar_palabra_exacta(
-                        titulo_texto, PALABRAS_CLAVE)
+                        # Filtro de basura (Deportes, Luces, etc.)
+                        if any(seccion in url_noticia for seccion in SECCIONES_IGNORAR):
+                            continue
 
-                    # --- REGLA DE ACEPTACIÓN (IGUAL A RPP) ---
+                        # === AQUÍ ESTÁ LA MAGIA (DOBLE FILTRO) ===
 
-                    # 1. Detectamos un DELITO (Prioridad Alta)
-                    if delito_detectado:
-                        ubicacion = distrito_detectado if distrito_detectado else "⚠️ No Especificado"
-                        noticias.append({
-                            "Titular": titulo_texto,
-                            "Enlace": url_noticia,
-                            "Fuente": "El Comercio",
-                            "Distrito": ubicacion,
-                            "Categoría": delito_detectado
-                        })
+                        # 1. DETECCIÓN (Usamos config.py)
+                        distrito_detectado = buscar_palabra_exacta(
+                            titulo_texto, DISTRITOS_INTEGRADOS)
+                        delito_detectado = buscar_palabra_exacta(
+                            titulo_texto, PALABRAS_CLAVE)
 
-                    # 2. La URL dice explícitamente secciones de seguridad
-                    elif "/sucesos/" in url_noticia or "/judiciales/" in url_noticia or "/policiales/" in url_noticia:
-                        ubicacion = distrito_detectado if distrito_detectado else "⚠️ No Especificado"
-                        noticias.append({
-                            "Titular": titulo_texto,
-                            "Enlace": url_noticia,
-                            "Fuente": "El Comercio",
-                            "Distrito": ubicacion,
-                            "Categoría": "Policiales/Sucesos"
-                        })
+                        # 2. REGLA DE ORO: SI NO HAY DISTRITO, NO ENTRA (Igual que RPP)
+                        if distrito_detectado:
 
-    except Exception as e:
-        print(f"❌ Error en El Comercio: {e}")
+                            es_relevante = False
+                            categoria = "General"
+
+                            # A. Si menciona un delito explícito (Robo, Sicario, etc.)
+                            if delito_detectado:
+                                es_relevante = True
+                                categoria = delito_detectado
+
+                            # B. O si la URL es de secciones rojas (Sucesos/Judiciales)
+                            elif "/sucesos/" in url_noticia or "/judiciales/" in url_noticia or "/policiales/" in url_noticia:
+                                es_relevante = True
+                                categoria = "Policiales/Sucesos"
+
+                            # C. Si pasó los filtros, guardamos
+                            if es_relevante:
+                                # Evitar duplicados
+                                if not any(n['Enlace'] == url_noticia for n in noticias):
+                                    noticias.append({
+                                        "Titular": titulo_texto,
+                                        "Enlace": url_noticia,
+                                        "Fuente": "El Comercio",
+                                        "Distrito": distrito_detectado,
+                                        "Categoría": categoria
+                                    })
+            time.sleep(1)  # Cortesía
+
+        except Exception as e:
+            print(f"❌ Error en El Comercio ({url_base}): {e}")
+            continue
 
     return noticias
 
 
-# Bloque de prueba individual
+# Bloque de prueba (solo si ejecutas este archivo directo)
 if __name__ == "__main__":
     mis_noticias = obtener_noticias()
-    print(f"Resumen: Se encontraron {len(mis_noticias)} noticias.")
+    print(
+        f"Resumen Final: Se encontraron {len(mis_noticias)} noticias FILTRADAS.")
     for n in mis_noticias:
-        print(f"✅ [{n['Distrito']}] {n['Titular']}")
+        print(f"✅ {n['Titular']} | 📍 {n['Distrito']} | 🏷️ {n['Categoría']}")
