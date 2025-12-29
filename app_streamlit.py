@@ -68,14 +68,16 @@ def obtener_coordenadas(ubicacion):
 # ==============================================================================
 
 
-@st.cache_data(ttl=300, show_spinner="Escaneando y filtrando con config.py...")
+@st.cache_data(ttl=300, show_spinner="Escaneando fuentes...")
 def escanear_con_archivos_propios():
+    # Verificamos si los módulos se cargaron bien
     if not MODULES_AVAILABLE:
         st.error("⚠️ Error: No se detectan los archivos en la carpeta 'webscraping'.")
         return pd.DataFrame()
 
     todas_las_noticias = []
 
+    # Lista de tus scrapers
     mis_scrapers = [
         ("RPP", webscraping_rpp),
         ("El Comercio", web_scraping_el_comercio),
@@ -91,10 +93,10 @@ def escanear_con_archivos_propios():
 
     for i, (nombre_web, modulo) in enumerate(mis_scrapers):
         try:
-            progress_bar.progress(int(((i)/total)*100),
-                                  text=f"Analizando: {nombre_web}...")
+            progress_bar.progress(int(((i)/total)*100), text=f"Analizando: {nombre_web}...")
 
-            # 1. Obtener datos crudos del scraper
+            # 1. EJECUTAR EL SCRAPER
+            # (El scraper ya se encargó de filtrar, confiamos en él)
             if hasattr(modulo, 'obtener_noticias'):
                 datos = modulo.obtener_noticias()
             elif hasattr(modulo, 'scrape'):
@@ -102,41 +104,33 @@ def escanear_con_archivos_propios():
             else:
                 continue
 
+            # 2. PROCESAR RESULTADOS (SIN VOLVER A FILTRAR)
             if datos:
+                # Si devuelve un DataFrame, lo convertimos a lista
                 if isinstance(datos, pd.DataFrame):
                     datos = datos.to_dict('records')
-
-                # 2. FILTRADO ESTRICTO USANDO TU LISTA DE CONFIG.PY
+                
                 for noticia in datos:
-                    titulo = noticia.get('Titular', '').strip()
+                    # Nos aseguramos de que tenga 'Fuente'
+                    if 'Fuente' not in noticia: 
+                        noticia['Fuente'] = nombre_web
+                    
+                    # Si no tiene categoría, le ponemos una por defecto
+                    if 'Categoría' not in noticia or not noticia['Categoría']:
+                        noticia['Categoría'] = "Delito Detectado"
 
-                    # Verificación de Seguridad:
-                    # Buscamos si el título contiene ALGUNA palabra de tu config.py
-                    es_crimen_real = False
-                    categoria_detectada = "General"
+                    # ¡IMPORTANTE! Agregamos la noticia directamente
+                    # (Aquí borramos el bloque 'if re.search' que te estaba borrando la noticia)
+                    todas_las_noticias.append(noticia)
 
-                    titulo_lower = titulo.lower()
-                    for palabra in PALABRAS_CLAVE:  # <--- Aquí usamos la lista importada
-                        # Regex para palabra exacta (evita falsos positivos como 'interna' vs 'terna')
-                        if re.search(r'\b' + re.escape(palabra) + r'\b', titulo_lower):
-                            es_crimen_real = True
-                            categoria_detectada = palabra.upper()
-                            break
-
-                    # 3. SOLO AGREGAMOS SI PASÓ EL FILTRO
-                    if es_crimen_real:
-                        if 'Fuente' not in noticia:
-                            noticia['Fuente'] = nombre_web
-
-                        # Sobrescribimos la categoría con la palabra clave detectada
-                        noticia['Categoría'] = categoria_detectada
-
-                        todas_las_noticias.append(noticia)
-
-        except Exception:
+        except Exception as e:
+            # Si falla un periódico, seguimos con los otros sin detener todo
+            print(f"Error leyendo {nombre_web}: {e}")
             continue
 
     progress_bar.empty()
+    
+    # Retornamos todo lo que encontramos
     return pd.DataFrame(todas_las_noticias) if todas_las_noticias else pd.DataFrame()
 
 
