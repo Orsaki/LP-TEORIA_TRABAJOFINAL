@@ -1,4 +1,4 @@
-from config import HEADERS, PALABRAS_CLAVE, DISTRITOS_INTEGRADOS
+from config import HEADERS, DISTRITOS_INTEGRADOS, PALABRAS_CLAVE
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -6,126 +6,113 @@ import sys
 import os
 import time
 
-# --- CONEXIÓN CON CONFIG.PY (Igual que tu amigo) ---
+# --- 1. CONEXIÓN CON CONFIG.PY ---
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# El Comercio tiene estructura diferente. Usamos la sección LIMA y SUCESOS
+# --- 2. URLs OBJETIVO (CRIMEN PURO) ---
 URLS_OBJETIVO = [
-    "https://elcomercio.pe/lima/",
-    "https://elcomercio.pe/lima/sucesos/",
-    "https://elcomercio.pe/lima/judiciales/"
+    "https://elcomercio.pe/noticias/delincuencia/",
+    "https://elcomercio.pe/noticias/sicariato/",
+    "https://elcomercio.pe/noticias/asaltos/",
+    "https://elcomercio.pe/noticias/homicidios/",
+    "https://elcomercio.pe/noticias/extorsion/",
+    "https://elcomercio.pe/noticias/robo/"
 ]
 
-# ============================================================================
-# FILTROS DE LIMPIEZA
-# ============================================================================
-SECCIONES_IGNORAR = [
-    "/politica/", "/economia/", "/opinion/", "/deporte-total/", "/luces/",
-    "/gastronomia/", "/tecnologia/", "/ciencias/", "/respuestas/", "/hogar/",
-    "/mundo/", "/somos/", "/el-dominical/"
-]
+# --- 3. LISTA NEGRA AMPLIADA (FILTRO "ANTI-GOBIERNO" Y "ANTI-CRÓNICAS") ---
+# Aquí agregamos las palabras específicas de las filas que quieres eliminar.
+BASURA_A_IGNORAR = [
+    # A. Lo que pediste eliminar explícitamente (Política/Gestión)
+    "gobierno", "estado de emergencia", "prórroga", "decreto", "oficial",
+    "guardia municipal", "serenos", "serenazgo", "funciones", "municipalidad",
+    "alcalde", "norma", "ley", "congreso",
 
-# ============================================================================
-# FUNCIONES AUXILIARES
-# ============================================================================
+    # B. Crónicas o historias largas (El caso de la joyería)
+    "cuentan cómo", "vivir a un paso", "crónica", "historia de", "perfil",
+
+    # C. Tráfico y Clima (Lo de siempre)
+    "tráfico", "vehicular", "congestion", "desvío",
+    "navidad", "año nuevo", "feriado", "celebración", "misa",
+    "senamhi", "clima", "verano", "playa", "calor",
+    "incendio", "bomberos", "sismo", "temblor"
+]
 
 
 def buscar_palabra_exacta(texto, lista_palabras):
     texto = texto.lower()
     for palabra in lista_palabras:
-        patron = r'\b' + re.escape(palabra) + r'\b'
-        if re.search(patron, texto):
+        if re.search(r'\b' + re.escape(palabra) + r'\b', texto):
             return palabra.upper()
     return None
-
-# ============================================================================
-# FUNCIÓN PRINCIPAL (LÓGICA RÉPLICA DE RPP)
-# ============================================================================
 
 
 def obtener_noticias():
     noticias = []
 
-    # Escaneamos las secciones principales
     for url_base in URLS_OBJETIVO:
+        # Solo página 1 para tener lo último y evitar basura antigua
         print(f"📡 Escaneando El Comercio: {url_base}...")
 
         try:
             response = requests.get(url_base, headers=HEADERS, timeout=10)
+            if response.status_code != 200:
+                continue
 
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, 'html.parser')
-                # El Comercio usa h2 para titulares principales
-                elementos = soup.find_all(['h2', 'h3'])
+            soup = BeautifulSoup(response.content, 'html.parser')
+            elementos = soup.find_all(['h2', 'h3'])
 
-                for item in elementos:
-                    enlace = item.find('a')
-                    if enlace:
-                        titulo_texto = enlace.text.strip()
-                        url_parcial = enlace.get('href')
+            for item in elementos:
+                enlace = item.find('a')
+                if enlace:
+                    titulo = enlace.text.strip()
+                    url_parcial = enlace.get('href')
 
-                        # Limpieza básica
-                        if not url_parcial or len(titulo_texto) < 15:
-                            continue
+                    if not url_parcial or len(titulo) < 15:
+                        continue
 
-                        # Completar URL (El Comercio usa rutas relativas)
-                        if not url_parcial.startswith("http"):
-                            url_noticia = "https://elcomercio.pe" + url_parcial
-                        else:
-                            url_noticia = url_parcial
+                    url_noticia = "https://elcomercio.pe" + \
+                        url_parcial if not url_parcial.startswith(
+                            "http") else url_parcial
 
-                        # Filtro de basura (Deportes, Luces, etc.)
-                        if any(seccion in url_noticia for seccion in SECCIONES_IGNORAR):
-                            continue
+                    # ====================================================
+                    # LÓGICA DE LIMPIEZA
+                    # ====================================================
+                    titulo_lower = titulo.lower()
 
-                        # === AQUÍ ESTÁ LA MAGIA (DOBLE FILTRO) ===
+                    # 1. ELIMINAR FILAS NO DESEADAS
+                    # Si contiene "Gobierno", "Emergencia", "Serenos" o "Cuentan cómo", SE VA.
+                    if any(basura in titulo_lower for basura in BASURA_A_IGNORAR):
+                        continue
 
-                        # 1. DETECCIÓN (Usamos config.py)
-                        distrito_detectado = buscar_palabra_exacta(
-                            titulo_texto, DISTRITOS_INTEGRADOS)
-                        delito_detectado = buscar_palabra_exacta(
-                            titulo_texto, PALABRAS_CLAVE)
+                    # 2. VALIDACIÓN (Usando config.py)
+                    distrito = buscar_palabra_exacta(
+                        titulo, DISTRITOS_INTEGRADOS)
+                    categoria = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
 
-                        # 2. REGLA DE ORO: SI NO HAY DISTRITO, NO ENTRA (Igual que RPP)
-                        if distrito_detectado:
-
-                            es_relevante = False
-                            categoria = "General"
-
-                            # A. Si menciona un delito explícito (Robo, Sicario, etc.)
-                            if delito_detectado:
-                                es_relevante = True
-                                categoria = delito_detectado
-
-                            # B. O si la URL es de secciones rojas (Sucesos/Judiciales)
-                            elif "/sucesos/" in url_noticia or "/judiciales/" in url_noticia or "/policiales/" in url_noticia:
-                                es_relevante = True
-                                categoria = "Policiales/Sucesos"
-
-                            # C. Si pasó los filtros, guardamos
-                            if es_relevante:
-                                # Evitar duplicados
-                                if not any(n['Enlace'] == url_noticia for n in noticias):
-                                    noticias.append({
-                                        "Titular": titulo_texto,
-                                        "Enlace": url_noticia,
-                                        "Fuente": "El Comercio",
-                                        "Distrito": distrito_detectado,
-                                        "Categoría": categoria
-                                    })
-            time.sleep(1)  # Cortesía
+                    # 3. GUARDAR
+                    if distrito and categoria:
+                        if not any(n['Enlace'] == url_noticia for n in noticias):
+                            noticias.append({
+                                "Titular": titulo,
+                                "Enlace": url_noticia,
+                                "Fuente": "El Comercio",
+                                "Distrito": distrito,
+                                "Categoría": categoria
+                            })
 
         except Exception as e:
-            print(f"❌ Error en El Comercio ({url_base}): {e}")
+            print(f"Error leve en {url_base}: {e}")
             continue
+
+        time.sleep(1)
 
     return noticias
 
 
-# Bloque de prueba (solo si ejecutas este archivo directo)
 if __name__ == "__main__":
-    mis_noticias = obtener_noticias()
-    print(
-        f"Resumen Final: Se encontraron {len(mis_noticias)} noticias FILTRADAS.")
-    for n in mis_noticias:
-        print(f"✅ {n['Titular']} | 📍 {n['Distrito']} | 🏷️ {n['Categoría']}")
+    resultado = obtener_noticias()
+    print(f"--- REPORTE FINAL ---")
+    print(f"Noticias encontradas: {len(resultado)}")
+    for n in resultado:
+        print(
+            f"✅ {n['Titular']} \n   -> 📍 {n['Distrito']} | 🏷️ {n['Categoría']}\n")

@@ -93,7 +93,8 @@ def escanear_con_archivos_propios():
 
     for i, (nombre_web, modulo) in enumerate(mis_scrapers):
         try:
-            progress_bar.progress(int(((i)/total)*100), text=f"Analizando: {nombre_web}...")
+            progress_bar.progress(int(((i)/total)*100),
+                                  text=f"Analizando: {nombre_web}...")
 
             # 1. EJECUTAR EL SCRAPER
             # (El scraper ya se encargó de filtrar, confiamos en él)
@@ -109,12 +110,12 @@ def escanear_con_archivos_propios():
                 # Si devuelve un DataFrame, lo convertimos a lista
                 if isinstance(datos, pd.DataFrame):
                     datos = datos.to_dict('records')
-                
+
                 for noticia in datos:
                     # Nos aseguramos de que tenga 'Fuente'
-                    if 'Fuente' not in noticia: 
+                    if 'Fuente' not in noticia:
                         noticia['Fuente'] = nombre_web
-                    
+
                     # Si no tiene categoría, le ponemos una por defecto
                     if 'Categoría' not in noticia or not noticia['Categoría']:
                         noticia['Categoría'] = "Delito Detectado"
@@ -129,7 +130,7 @@ def escanear_con_archivos_propios():
             continue
 
     progress_bar.empty()
-    
+
     # Retornamos todo lo que encontramos
     return pd.DataFrame(todas_las_noticias) if todas_las_noticias else pd.DataFrame()
 
@@ -289,25 +290,69 @@ elif menu == "Análisis por Periódico":
             df_viz = df_analisis[df_analisis['Fuente'].isin(fuentes_sel)]
 
         st.write("---")
+
+        # 1. GRÁFICOS DE RESUMEN (Los clásicos)
         c1, c2 = st.columns(2)
         with c1:
             conteo = df_viz['Fuente'].value_counts().reset_index()
             conteo.columns = ['Fuente', 'Cantidad']
             fig1 = px.bar(conteo, x='Fuente', y='Cantidad',
-                          color='Fuente', title="Delitos reportados por Medio")
+                          color='Fuente', title="Noticias por Medio")
             st.plotly_chart(fig1, use_container_width=True)
         with c2:
             if 'Categoría' in df_viz.columns:
                 conteo_tipo = df_viz['Categoría'].value_counts().reset_index()
                 conteo_tipo.columns = ['Categoría', 'Cantidad']
                 fig2 = px.pie(conteo_tipo, names='Categoría',
-                              values='Cantidad', hole=0.4, title="Tipos de Delito")
+                              values='Cantidad', hole=0.4, title="Distribución de Delitos")
                 st.plotly_chart(fig2, use_container_width=True)
+
+        # ====================================================================
+        # NUEVO: MOSAICO DE CALOR (TREEMAP) - ¡MUCHO MÁS VISUAL!
+        # ====================================================================
+        st.write("---")
+        st.subheader("🚨 Mapa de Calor por Distritos (Hotspots)")
+
+        # Filtramos 'No Especificado'
+        df_ranking = df_viz[df_viz['Distrito'] != "⚠️ No Especificado"].copy()
+
+        if not df_ranking.empty:
+            # --- CORRECCIÓN VISUAL: LIMA -> CERCADO DE LIMA ---
+            # Esto arregla lo que me dijiste. "Lima" a secas se ve mal, mejor "Cercado".
+            df_ranking.loc[df_ranking['Distrito'] ==
+                           'LIMA', 'Distrito'] = 'CERCADO DE LIMA'
+
+            # Preparamos datos para el Treemap
+            # Agrupamos por Distrito Y Categoría para ver el detalle
+            df_treemap = df_ranking.groupby(
+                ['Distrito', 'Categoría']).size().reset_index(name='Casos')
+
+            # Gráfico TREEMAP (Mosaico)
+            fig3 = px.treemap(df_treemap,
+                              # Jerarquía: Primero Distrito, luego Delito
+                              path=['Distrito', 'Categoría'],
+                              values='Casos',
+                              color='Casos',
+                              color_continuous_scale='Reds',  # Rojo = Peligro
+                              title="Concentración de Crimen (Tamaño = Más Delitos)",
+                              hover_data=['Casos'])
+
+            # Personalizamos para que se vea moderno
+            fig3.update_traces(root_color="lightgrey")
+            fig3.update_layout(margin=dict(t=50, l=25, r=25, b=25))
+
+            st.plotly_chart(fig3, use_container_width=True)
+            st.info(
+                "💡 Tip: Haz clic en un distrito (cuadro grande) para ver qué delitos específicos ocurren ahí.")
+        else:
+            st.info(
+                "No hay suficientes datos de ubicación para generar el mapa de calor.")
+        # ====================================================================
+
         st.dataframe(
             df_viz[['Titular', 'Categoría', 'Distrito', 'Fuente']],
             hide_index=True,
             use_container_width=True)
-
 # =======================================================================
 #  EQUIPO Y EMERGENCIAS
 # =======================================================================
