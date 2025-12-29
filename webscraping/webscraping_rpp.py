@@ -3,113 +3,122 @@ from bs4 import BeautifulSoup
 import re
 import sys
 import os
+import time # Importamos time para no saturar la web
 
 # --- CONEXIÓN CON CONFIG.PY ---
-# Agregamos la ruta padre para importar las listas generales
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import HEADERS, PALABRAS_CLAVE, DISTRITOS_INTEGRADOS
 
 URL_WEB = "https://rpp.pe/ultimas-noticias"
 
 # ============================================================================
-# FILTROS
+# FILTROS Y VOCABULARIO
 # ============================================================================
 
-# FILTRO DE URL: Solo conservamos esto. Es seguro.
-# Si RPP clasifica la nota en estas secciones, la ignoramos para evitar basura obvia.
 SECCIONES_IGNORAR = [
     "/famosos/", "/entretenimiento/", "/deportes/", "/futbol/", "/voley/", 
     "/automovilismo/", "/tecnologia/", "/ciencia/", "/salud/", "/economia/", 
-    "/mundo/", "/horoscopo/", "/vital/"
+    "/mundo/", "/horoscopo/", "/vital/",
+    "/peru/piura/", "/peru/arequipa/", "/peru/cusco/", "/peru/norte/", "/peru/sur/"
 ]
 
+VOCABULARIO_EXTRA = [
+    "muere", "fallece", "matan", "acribillado", "acribillan", "baleado", 
+    "disparan", "siniestro", "incendio", "granada", "explosivo", "cuerpo", 
+    "cadáver", "sicariato"
+]
+
+TODAS_LAS_CLAVES = PALABRAS_CLAVE + VOCABULARIO_EXTRA
 
 # ============================================================================
 # FUNCIONES AUXILIARES
 # ============================================================================
 
 def buscar_palabra_exacta(texto, lista_palabras):
-    """Busca si una palabra de la lista está en el texto."""
     texto = texto.lower()
     for palabra in lista_palabras:
-        # \b sirve para que no detecte "mate" dentro de "tomate"
         patron = r'\b' + re.escape(palabra) + r'\b'
         if re.search(patron, texto):
             return palabra.upper()
     return None
 
 # ============================================================================
-# FUNCIÓN PRINCIPAL DE SCRAPING
+# FUNCIÓN PRINCIPAL (CON PAGINACIÓN 1-3)
 # ============================================================================
 
 def obtener_noticias():
     noticias = []
-    print(f"📡 Escaneando RPP (Sin palabras prohibidas)...")
-
-    try:
-        response = requests.get(URL_WEB, headers=HEADERS, timeout=10)
+    
+    # BUCLE: Revisamos página 1, 2 y 3
+    for pagina in range(1, 4): 
+        print(f"📡 Escaneando RPP - Página {pagina}...")
         
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            elementos = soup.find_all(['h2', 'h3'])
+        try:
+            # Construimos la URL con el número de página: ?page=1, ?page=2, etc.
+            url_paginada = f"{URL_WEB}?page={pagina}"
+            response = requests.get(url_paginada, headers=HEADERS, timeout=10)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                elementos = soup.find_all(['h2', 'h3'])
 
-            for item in elementos:
-                enlace = item.find('a')
-                if enlace:
-                    titulo_texto = enlace.text.strip()
-                    url_parcial = enlace.get('href')
+                for item in elementos:
+                    enlace = item.find('a')
+                    if enlace:
+                        titulo_texto = enlace.text.strip()
+                        url_parcial = enlace.get('href')
 
-                    # --- LIMPIEZA BÁSICA ---
-                    if not url_parcial or len(titulo_texto) < 15:
-                        continue 
+                        # Limpieza
+                        if not url_parcial or len(titulo_texto) < 15: continue 
 
-                    if not url_parcial.startswith("http"):
-                        url_noticia = "https://rpp.pe" + url_parcial
-                    else:
-                        url_noticia = url_parcial
+                        if not url_parcial.startswith("http"):
+                            url_noticia = "https://rpp.pe" + url_parcial
+                        else:
+                            url_noticia = url_parcial
 
-                    # --- FILTRO SOLO POR URL ---
-                    # Si viene de una sección basura, la saltamos.
-                    if any(seccion in url_noticia for seccion in SECCIONES_IGNORAR):
-                        continue
+                        # Filtro URL
+                        if any(seccion in url_noticia for seccion in SECCIONES_IGNORAR): continue
 
-                    # --- ANÁLISIS ---
-                    distrito_detectado = buscar_palabra_exacta(titulo_texto, DISTRITOS_INTEGRADOS)
-                    delito_detectado = buscar_palabra_exacta(titulo_texto, PALABRAS_CLAVE)
+                        # Análisis
+                        distrito_detectado = buscar_palabra_exacta(titulo_texto, DISTRITOS_INTEGRADOS)
+                        delito_detectado = buscar_palabra_exacta(titulo_texto, TODAS_LAS_CLAVES)
 
-                    # --- REGLA DE ACEPTACIÓN ---
-                    # Aceptamos la noticia si cumple CUALQUIERA de estas condiciones:
-                    
-                    # 1. Detectamos un DELITO (La más importante)
-                    if delito_detectado:
-                        ubicacion = distrito_detectado if distrito_detectado else "⚠️ No Especificado"
-                        noticias.append({
-                            "Titular": titulo_texto,
-                            "Enlace": url_noticia,
-                            "Fuente": "RPP",
-                            "Distrito": ubicacion,
-                            "Categoría": delito_detectado
-                        })
-                    
-                    # 2. La URL dice "policiales" o "judiciales"
-                    elif "/policiales/" in url_noticia or "/judiciales/" in url_noticia:
-                         ubicacion = distrito_detectado if distrito_detectado else "⚠️ No Especificado"
-                         noticias.append({
-                            "Titular": titulo_texto,
-                            "Enlace": url_noticia,
-                            "Fuente": "RPP",
-                            "Distrito": ubicacion,
-                            "Categoría": "Policiales/Judiciales"
-                        })
+                        # Regla Estricta: SOLO LIMA/CALLAO
+                        if distrito_detectado:
+                            
+                            es_relevante = False
+                            categoria = "General"
 
+                            if delito_detectado:
+                                es_relevante = True
+                                categoria = delito_detectado
+                            
+                            elif "/policiales/" in url_noticia or "/judiciales/" in url_noticia:
+                                es_relevante = True
+                                categoria = "Policiales/Judiciales"
 
-    except Exception as e:
-        print(f"❌ Error en RPP: {e}")
+                            if es_relevante:
+                                # Evitamos duplicados (por si la noticia sale en dos páginas)
+                                if not any(n['Enlace'] == url_noticia for n in noticias):
+                                    noticias.append({
+                                        "Titular": titulo_texto,
+                                        "Enlace": url_noticia,
+                                        "Fuente": "RPP",
+                                        "Distrito": distrito_detectado,
+                                        "Categoría": categoria
+                                    })
+            
+            # Pausa pequeña para no bloquearnos
+            time.sleep(1)
+
+        except Exception as e:
+            print(f"❌ Error en RPP Pag {pagina}: {e}")
+            continue
 
     return noticias
 
 if __name__ == "__main__":
     mis_noticias = obtener_noticias()
-    print(f"Resumen: Se encontraron {len(mis_noticias)} noticias.")
+    print(f"Resumen Final: Se encontraron {len(mis_noticias)} noticias de LIMA en las últimas 3 páginas.")
     for n in mis_noticias:
-        print(f"✅ {n['Titular']}")
+        print(f"✅ {n['Titular']} | 📍 {n['Distrito']} | 🏷️ {n['Categoría']}")
