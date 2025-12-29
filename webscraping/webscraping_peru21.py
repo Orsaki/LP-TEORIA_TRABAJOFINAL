@@ -449,3 +449,130 @@ elif menu == "Equipo":
     <div class="member-card"><div class="avatar">👩‍💻</div><div class="member-name">Fátima Montes</div><div class="member-role">Ingeniería Estadística Informática</div><a href="https://github.com/FatimaMY" target="_blank" class="github-btn">GitHub Profile</a></div>
     </div>
     """, unsafe_allow_html=True)
+
+
+elif menu == "Emergencias":
+    st.title("📞 Centrales de Emergencia")
+    st.caption("📱 En celulares, toca el botón para llamar directamente o ubicar ayuda cercana.")
+
+    col1, col2, col3 = st.columns(3)
+
+    # =========================
+    # POLICÍA
+    # =========================
+    with col1:
+        st.error("### 👮 Policía Nacional")
+        st.write("Atención inmediata ante delitos.")
+        st.markdown(
+            """
+            <a href="tel:105">
+                <button style="
+                    width:100%;
+                    padding:12px;
+                    font-size:16px;
+                    background-color:#ff4b4b;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📞 Llamar al 105
+                </button>
+            </a>
+            <br><br>
+            <a href="https://www.google.com/maps/search/comisaría+cercana" target="_blank">
+                <button style="
+                    width:100%;
+                    padding:10px;
+                    font-size:14px;
+                    background-color:#444;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📍 Buscar comisarías cercanas
+                </button>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # =========================
+    # BOMBEROS
+    # =========================
+    with col2:
+        st.warning("### 🚒 Bomberos")
+        st.write("Incendios, rescates y emergencias.")
+        st.markdown(
+            """
+            <a href="tel:116">
+                <button style="
+                    width:100%;
+                    padding:12px;
+                    font-size:16px;
+                    background-color:#ffa500;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📞 Llamar al 116
+                </button>
+            </a>
+            <br><br>
+            <a href="https://www.google.com/maps/search/estación+de+bomberos+cercana" target="_blank">
+                <button style="
+                    width:100%;
+                    padding:10px;
+                    font-size:14px;
+                    background-color:#444;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📍 Buscar bomberos cercanos
+                </button>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # =========================
+    # SAMU
+    # =========================
+    with col3:
+        st.info("### 🚑 SAMU")
+        st.write("Urgencias médicas.")
+        st.markdown(
+            """
+            <a href="tel:106">
+                <button style="
+                    width:100%;
+                    padding:12px;
+                    font-size:16px;
+                    background-color:#2e86de;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📞 Llamar al 106
+                </button>
+            </a>
+            <br><br>
+            <a href="https://www.google.com/maps/search/hospital+cercano" target="_blank">
+                <button style="
+                    width:100%;
+                    padding:10px;
+                    font-size:14px;
+                    background-color:#444;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📍 Buscar hospitales cercanos
+                </button>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.write("---")
+    st.info("💡 Tip: En una emergencia, compartir tu ubicación y llamar inmediatamente puede salvar vidas.")
