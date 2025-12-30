@@ -275,87 +275,158 @@ elif menu == "Análisis por Periódico":
         st.warning("⚠️ Sin datos. Ejecuta el escaneo en Inicio.")
     else:
         st.write("### 🔍 Filtros")
+
+        # 🔹 LISTA FIJA DE TODOS LOS PERIÓDICOS
+        TODOS_LOS_PERIODICOS = [
+            "RPP",
+            "El Comercio",
+            "Canal N",
+            "Diario Correo",
+            "Infobae",
+            "La República",
+            "Perú21"
+        ]
+
         col_f1, col_f2 = st.columns(2)
+
+        # =========================
+        # FILTRO DE MEDIOS
+        # =========================
         with col_f1:
             fuentes_sel = st.multiselect(
-                "Medio:", df_analisis['Fuente'].unique(), default=df_analisis['Fuente'].unique())
+                "Medio:",
+                options=TODOS_LOS_PERIODICOS,
+                default=TODOS_LOS_PERIODICOS
+            )
 
+        # =========================
+        # FILTRO DE CATEGORÍA
+        # =========================
         if 'Categoría' in df_analisis.columns:
             with col_f2:
-                tipos_sel = st.multiselect("Tipo de Delito:", df_analisis['Categoría'].unique(
-                ), default=df_analisis['Categoría'].unique())
-            df_viz = df_analisis[df_analisis['Fuente'].isin(
-                fuentes_sel) & df_analisis['Categoría'].isin(tipos_sel)]
+                tipos_sel = st.multiselect(
+                    "Tipo de Delito:",
+                    df_analisis['Categoría'].unique(),
+                    default=df_analisis['Categoría'].unique()
+                )
+
+            df_viz = df_analisis[
+                (df_analisis['Fuente'].isin(fuentes_sel)) &
+                (df_analisis['Categoría'].isin(tipos_sel))
+            ]
         else:
             df_viz = df_analisis[df_analisis['Fuente'].isin(fuentes_sel)]
 
         st.write("---")
 
-        # 1. GRÁFICOS DE RESUMEN (Los clásicos)
+        # =========================
+        # GRÁFICOS DE RESUMEN
+        # =========================
         c1, c2 = st.columns(2)
+
         with c1:
-            conteo = df_viz['Fuente'].value_counts().reset_index()
+            conteo = (
+                df_viz['Fuente']
+                .value_counts()
+                .reindex(TODOS_LOS_PERIODICOS, fill_value=0)
+                .reset_index()
+            )
             conteo.columns = ['Fuente', 'Cantidad']
-            fig1 = px.bar(conteo, x='Fuente', y='Cantidad',
-                          color='Fuente', title="Noticias por Medio")
+
+            fig1 = px.bar(
+                conteo,
+                x='Fuente',
+                y='Cantidad',
+                color='Fuente',
+                title="Noticias por Medio"
+            )
             st.plotly_chart(fig1, use_container_width=True)
+
         with c2:
-            if 'Categoría' in df_viz.columns:
+            if 'Categoría' in df_viz.columns and not df_viz.empty:
                 conteo_tipo = df_viz['Categoría'].value_counts().reset_index()
                 conteo_tipo.columns = ['Categoría', 'Cantidad']
-                fig2 = px.pie(conteo_tipo, names='Categoría',
-                              values='Cantidad', hole=0.4, title="Distribución de Delitos")
+
+                fig2 = px.pie(
+                    conteo_tipo,
+                    names='Categoría',
+                    values='Cantidad',
+                    hole=0.4,
+                    title="Distribución de Delitos"
+                )
                 st.plotly_chart(fig2, use_container_width=True)
 
-        # ====================================================================
-        # NUEVO: MOSAICO DE CALOR (TREEMAP) - ¡MUCHO MÁS VISUAL!
-        # ====================================================================
+        # =========================
+        # TREEMAP
+        # =========================
         st.write("---")
-        st.subheader("🚨 Mapa de Calor por Distritos (Hotspots)")
+        st.subheader("🚨 Mapa de Calor por Distritos")
 
-        # Filtramos 'No Especificado'
-        df_ranking = df_viz[df_viz['Distrito'] != "⚠️ No Especificado"].copy()
+        df_geo = df_viz[df_viz['Distrito'] != "⚠️ No Especificado"].copy()
 
-        if not df_ranking.empty:
-            # --- CORRECCIÓN VISUAL: LIMA -> CERCADO DE LIMA ---
-            # Esto arregla lo que me dijiste. "Lima" a secas se ve mal, mejor "Cercado".
-            df_ranking.loc[df_ranking['Distrito'] ==
-                           'LIMA', 'Distrito'] = 'CERCADO DE LIMA'
+        if not df_geo.empty:
+            df_geo.loc[df_geo['Distrito'] == 'LIMA', 'Distrito'] = 'CERCADO DE LIMA'
 
-            # Preparamos datos para el Treemap
-            # Agrupamos por Distrito Y Categoría para ver el detalle
-            df_treemap = df_ranking.groupby(
-                ['Distrito', 'Categoría']).size().reset_index(name='Casos')
+            df_treemap = (
+                df_geo
+                .groupby(['Distrito', 'Categoría'])
+                .size()
+                .reset_index(name='Casos')
+            )
 
-            # Gráfico TREEMAP (Mosaico)
-            fig3 = px.treemap(df_treemap,
-                              # Jerarquía: Primero Distrito, luego Delito
-                              path=['Distrito', 'Categoría'],
-                              values='Casos',
-                              color='Casos',
-                              color_continuous_scale='Reds',  # Rojo = Peligro
-                              title="Concentración de Crimen (Tamaño = Más Delitos)",
-                              hover_data=['Casos'])
-
-            # Personalizamos para que se vea moderno
-            fig3.update_traces(root_color="lightgrey")
-            fig3.update_layout(margin=dict(t=50, l=25, r=25, b=25))
+            fig3 = px.treemap(
+                df_treemap,
+                path=['Distrito', 'Categoría'],
+                values='Casos',
+                color='Casos',
+                color_continuous_scale='Reds',
+                title="Concentración de Crimen"
+            )
 
             st.plotly_chart(fig3, use_container_width=True)
-            st.info(
-                "💡 Tip: Haz clic en un distrito (cuadro grande) para ver qué delitos específicos ocurren ahí.")
-        else:
-            st.info(
-                "No hay suficientes datos de ubicación para generar el mapa de calor.")
-        # ====================================================================
 
+        # =========================================================
+        # RANKING DE DISTRITOS MÁS PELIGROSOS
+        # =========================================================
+        st.write("---")
+        st.subheader("🏆 Ranking de Distritos Más Peligrosos")
+
+        df_rank = df_viz[df_viz['Distrito'] != "⚠️ No Especificado"].copy()
+
+        if not df_rank.empty:
+            df_rank.loc[df_rank['Distrito'] == 'LIMA', 'Distrito'] = 'CERCADO DE LIMA'
+
+            ranking = (
+                df_rank
+                .groupby('Distrito')
+                .size()
+                .reset_index(name='Cantidad de Delitos')
+                .sort_values(by='Cantidad de Delitos', ascending=False)
+            )
+
+            ranking.index = range(1, len(ranking) + 1)
+            ranking.index.name = "Ranking"
+
+            st.dataframe(ranking, use_container_width=True)
+        else:
+            st.info("No hay datos suficientes para generar el ranking.")
+
+        # =========================
+        # TABLA FINAL
+        # =========================
+        st.write("---")
         st.dataframe(
             df_viz[['Titular', 'Categoría', 'Distrito', 'Fuente']],
             hide_index=True,
-            use_container_width=True)
-# =======================================================================
-#  EQUIPO Y EMERGENCIAS
-# =======================================================================
+            use_container_width=True
+        )
+
+
+
+
+
+
+
 
 elif menu == "Equipo":
     st.markdown("""
@@ -379,15 +450,129 @@ elif menu == "Equipo":
     </div>
     """, unsafe_allow_html=True)
 
+
 elif menu == "Emergencias":
     st.title("📞 Centrales de Emergencia")
+    st.caption("📱 En celulares, toca el botón para llamar directamente o ubicar ayuda cercana.")
+
     col1, col2, col3 = st.columns(3)
+
+    # =========================
+    # POLICÍA
+    # =========================
     with col1:
-        st.error("### 👮 PNP 105")
-        st.write("Policía Nacional.")
+        st.error("### 👮 Policía Nacional")
+        st.write("Atención inmediata ante delitos.")
+        st.markdown(
+            """
+            <a href="tel:105">
+                <button style="
+                    width:100%;
+                    padding:12px;
+                    font-size:16px;
+                    background-color:#ff4b4b;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📞 Llamar al 105
+                </button>
+            </a>
+            <br><br>
+            <a href="https://www.google.com/maps/search/comisaría+cercana" target="_blank">
+                <button style="
+                    width:100%;
+                    padding:10px;
+                    font-size:14px;
+                    background-color:#444;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📍 Buscar comisarías cercanas
+                </button>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # =========================
+    # BOMBEROS
+    # =========================
     with col2:
-        st.warning("### 🚒 Bomberos 116")
-        st.write("Incendios y rescates.")
+        st.warning("### 🚒 Bomberos")
+        st.write("Incendios, rescates y emergencias.")
+        st.markdown(
+            """
+            <a href="tel:116">
+                <button style="
+                    width:100%;
+                    padding:12px;
+                    font-size:16px;
+                    background-color:#ffa500;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📞 Llamar al 116
+                </button>
+            </a>
+            <br><br>
+            <a href="https://www.google.com/maps/search/estación+de+bomberos+cercana" target="_blank">
+                <button style="
+                    width:100%;
+                    padding:10px;
+                    font-size:14px;
+                    background-color:#444;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📍 Buscar bomberos cercanos
+                </button>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # =========================
+    # SAMU
+    # =========================
     with col3:
-        st.info("### 🚑 SAMU 106")
+        st.info("### 🚑 SAMU")
         st.write("Urgencias médicas.")
+        st.markdown(
+            """
+            <a href="tel:106">
+                <button style="
+                    width:100%;
+                    padding:12px;
+                    font-size:16px;
+                    background-color:#2e86de;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📞 Llamar al 106
+                </button>
+            </a>
+            <br><br>
+            <a href="https://www.google.com/maps/search/hospital+cercano" target="_blank">
+                <button style="
+                    width:100%;
+                    padding:10px;
+                    font-size:14px;
+                    background-color:#444;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    cursor:pointer;">
+                    📍 Buscar hospitales cercanos
+                </button>
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.write("---")
+    st.info("💡 Tip: En una emergencia, compartir tu ubicación y llamar inmediatamente puede salvar vidas.")
