@@ -1,4 +1,3 @@
-from config import HEADERS, DISTRITOS_INTEGRADOS, PALABRAS_CLAVE
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -6,10 +5,28 @@ import sys
 import os
 import time
 
-# --- 1. CONEXIÓN CON CONFIG.PY ---
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# ============================================================================
+# 1. IMPORTACIÓN FLEXIBLE
+# ============================================================================
+try:
+    from config import HEADERS, DISTRITOS_INTEGRADOS, PALABRAS_CLAVE
+    print("✅ Configuración cargada desde la misma carpeta.")
+except ImportError:
+    try:
+        sys.path.append(os.path.abspath(
+            os.path.join(os.path.dirname(__file__), '..')))
+        from config import HEADERS, DISTRITOS_INTEGRADOS, PALABRAS_CLAVE
+        print("✅ Configuración cargada desde carpeta superior.")
+    except ImportError:
+        print("⚠️ No se encontró config.py. Usando valores por defecto.")
+        HEADERS = {'User-Agent': 'Mozilla/5.0'}
+        DISTRITOS_INTEGRADOS = ["LIMA", "SURCO", "SJL",
+                                "COMAS", "SMP", "MIRAFLORES", "CALLAO"]
+        PALABRAS_CLAVE = ["ROBO", "ASALTO", "SICARIATO", "MUERTE"]
 
-# --- 2. URLs OBJETIVO (CRIMEN PURO) ---
+# ============================================================================
+# 2. URLs OBJETIVO
+# ============================================================================
 URLS_OBJETIVO = [
     "https://elcomercio.pe/noticias/delincuencia/",
     "https://elcomercio.pe/noticias/sicariato/",
@@ -19,40 +36,47 @@ URLS_OBJETIVO = [
     "https://elcomercio.pe/noticias/robo/"
 ]
 
-# --- 3. LISTA NEGRA AMPLIADA (FILTRO "ANTI-GOBIERNO" Y "ANTI-CRÓNICAS") ---
-# Aquí agregamos las palabras específicas de las filas que quieres eliminar.
+# --- 3. LISTA NEGRA (Filtro Anti-Relleno) ---
 BASURA_A_IGNORAR = [
-    # A. Lo que pediste eliminar explícitamente (Política/Gestión)
     "gobierno", "estado de emergencia", "prórroga", "decreto", "oficial",
     "guardia municipal", "serenos", "serenazgo", "funciones", "municipalidad",
-    "alcalde", "norma", "ley", "congreso",
-
-    # B. Crónicas o historias largas (El caso de la joyería)
-    "cuentan cómo", "vivir a un paso", "crónica", "historia de", "perfil",
-
-    # C. Tráfico y Clima (Lo de siempre)
-    "tráfico", "vehicular", "congestion", "desvío",
-    "navidad", "año nuevo", "feriado", "celebración", "misa",
-    "senamhi", "clima", "verano", "playa", "calor",
-    "incendio", "bomberos", "sismo", "temblor"
+    "alcalde", "norma", "ley", "congreso", "cuentan cómo", "vivir a un paso",
+    "crónica", "historia de", "perfil", "tráfico", "vehicular", "congestion",
+    "desvío", "navidad", "año nuevo", "feriado", "celebración", "misa",
+    "senamhi", "clima", "verano", "playa", "calor", "incendio", "bomberos",
+    "sismo", "temblor"
 ]
+
+# ============================================================================
+# 🔥 CORRECCIÓN UNIVERSAL (Funciona para todos los distritos) 🔥
+# ============================================================================
 
 
 def buscar_palabra_exacta(texto, lista_palabras):
+    """
+    Busca palabras de la lista en el texto.
+    IMPORTANTE: Ordena la lista por longitud (de mayor a menor) antes de buscar.
+    Esto soluciona 'San Juan de Miraflores' vs 'Miraflores' automáticamente.
+    """
     texto = texto.lower()
-    for palabra in lista_palabras:
-        if re.search(r'\b' + re.escape(palabra) + r'\b', texto):
+
+    # Esta línea es la magia: Ordena para que los nombres largos tengan prioridad
+    # No es un parche, es lógica general de búsqueda.
+    lista_ordenada = sorted(lista_palabras, key=len, reverse=True)
+
+    for palabra in lista_ordenada:
+        # \b obliga a que sea palabra completa
+        if re.search(r'\b' + re.escape(palabra.lower()) + r'\b', texto):
             return palabra.upper()
+
     return None
 
 
 def obtener_noticias():
     noticias = []
+    print("\n--- INICIANDO ESCANEO EL COMERCIO ---")
 
     for url_base in URLS_OBJETIVO:
-        # Solo página 1 para tener lo último y evitar basura antigua
-        print(f"📡 Escaneando El Comercio: {url_base}...")
-
         try:
             response = requests.get(url_base, headers=HEADERS, timeout=10)
             if response.status_code != 200:
@@ -69,27 +93,25 @@ def obtener_noticias():
 
                     if not url_parcial or len(titulo) < 15:
                         continue
-
                     url_noticia = "https://elcomercio.pe" + \
                         url_parcial if not url_parcial.startswith(
                             "http") else url_parcial
 
-                    # ====================================================
-                    # LÓGICA DE LIMPIEZA
-                    # ====================================================
+                    # --- ANÁLISIS ---
                     titulo_lower = titulo.lower()
 
-                    # 1. ELIMINAR FILAS NO DESEADAS
-                    # Si contiene "Gobierno", "Emergencia", "Serenos" o "Cuentan cómo", SE VA.
+                    # 1. Filtro Basura
                     if any(basura in titulo_lower for basura in BASURA_A_IGNORAR):
                         continue
 
-                    # 2. VALIDACIÓN (Usando config.py)
+                    # 2. Buscar Distrito (Con la corrección universal)
                     distrito = buscar_palabra_exacta(
                         titulo, DISTRITOS_INTEGRADOS)
+
+                    # 3. Buscar Delito
                     categoria = buscar_palabra_exacta(titulo, PALABRAS_CLAVE)
 
-                    # 3. GUARDAR
+                    # 4. Guardar
                     if distrito and categoria:
                         if not any(n['Enlace'] == url_noticia for n in noticias):
                             noticias.append({
@@ -101,18 +123,17 @@ def obtener_noticias():
                             })
 
         except Exception as e:
-            print(f"Error leve en {url_base}: {e}")
+            print(f"⚠️ Error leve en {url_base}: {e}")
             continue
 
         time.sleep(1)
 
+    print(f"✅ El Comercio finalizado: {len(noticias)} noticias encontradas.")
     return noticias
 
 
 if __name__ == "__main__":
+    # Prueba rápida
     resultado = obtener_noticias()
-    print(f"--- REPORTE FINAL ---")
-    print(f"Noticias encontradas: {len(resultado)}")
     for n in resultado:
-        print(
-            f"✅ {n['Titular']} \n   -> 📍 {n['Distrito']} | 🏷️ {n['Categoría']}\n")
+        print(f"📰 {n['Titular']} | 📍 {n['Distrito']}")
